@@ -1,0 +1,16 @@
+.env
+.env.local
+
+node_modules/
+dist/
+coverage/
+.cache/
+docs/superpowers/
+
+*.test
+*.out
+
+.DS_Store
+.codex
+
+AGENTS.md
