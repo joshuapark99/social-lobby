@@ -1,0 +1,25 @@
+name: social-lobby
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: social-lobby-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: social_lobby
+      POSTGRES_USER: social_lobby
+      POSTGRES_PASSWORD: social_lobby
+    ports:
+      - "${SOCIAL_LOBBY_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - social_lobby_postgres_data:/var/lib/postgresql/data
+      - ./ops/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U social_lobby -d social_lobby"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  social_lobby_postgres_data:

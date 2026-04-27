@@ -1,6 +1,6 @@
 # Development
 
-Development happens directly on the Raspberry Pi under `/home/jpark/development/social-lobby`.
+Run commands from the repository root unless a section says otherwise.
 
 ## Backend
 
@@ -25,4 +25,11 @@ The frontend is a React/Vite workspace. `npm install` is required before running
 
 ## Docker Safety
 
-Do not run broad Docker cleanup, prune, network, or service restart commands on this Raspberry Pi. Project-local Docker files may be added in later tickets, but Docker host services must not be changed incidentally.
+Keep Docker commands scoped to this Compose project. Do not run broad Docker
+cleanup, prune, network, volume, or service restart commands as incidental
+development steps on a shared host.
+
+## Database
+
+Use the project-local PostgreSQL Compose service for development and migration
+integration checks. See `docs/database.md`.
