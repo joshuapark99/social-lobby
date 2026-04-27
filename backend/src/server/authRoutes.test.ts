@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { buildServer } from "./server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService, OidcIdentity } from "../auth/service.js";
+import { registerAuthRoutes } from "../auth/routes.js";
 
 function fakeAuthService(overrides: Partial<AuthService> = {}): AuthService {
   return {
@@ -21,6 +22,10 @@ function fakeAuthService(overrides: Partial<AuthService> = {}): AuthService {
 }
 
 describe("auth routes", () => {
+  test("auth route registration is owned by the auth module", () => {
+    expect(registerAuthRoutes).toEqual(expect.any(Function));
+  });
+
   test("GET /auth/login redirects to provider and stores OIDC state", async () => {
     const auth = fakeAuthService();
     const server = buildServer({ config: loadConfig({}), authService: auth });
