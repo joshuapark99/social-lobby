@@ -1,9 +1,10 @@
 import cookie from "@fastify/cookie";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import type { Config } from "../config/config.js";
 import { OidcProvider } from "../auth/oidc.js";
-import type { AuthService } from "../auth/service.js";
+import type { AuthService, OidcIdentity } from "../auth/service.js";
 import { newSessionToken } from "../auth/session.js";
+import { disabledInviteService, type InviteService } from "../invites/service.js";
 import {
   clearCsrfCookie,
   clearSessionCookie,
@@ -16,9 +17,10 @@ import {
   setSessionCookie
 } from "../auth/cookies.js";
 
-export function buildServer(options: { config: Config; authService?: AuthService }): FastifyInstance {
+export function buildServer(options: { config: Config; authService?: AuthService; inviteService?: InviteService }): FastifyInstance {
   const server = Fastify();
   const authService = options.authService ?? defaultAuthService(options.config);
+  const inviteService = options.inviteService ?? disabledInviteService();
 
   void server.register(cookie);
 
@@ -72,6 +74,59 @@ export function buildServer(options: { config: Config; authService?: AuthService
     return reply.status(204).send();
   });
 
+  server.post<{
+    Body: {
+      targetEmail?: string | null;
+      maxRedemptions?: number | null;
+      expiresAt?: string | null;
+    };
+  }>("/admin/invites", async (request, reply) => {
+    if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
+    const identity = await requireIdentity(request, reply, authService);
+    if (!identity) return reply;
+
+    try {
+      const invite = await inviteService.createInvite({
+        createdByUserId: identity.userId,
+        targetEmail: request.body?.targetEmail ?? null,
+        maxRedemptions: request.body?.maxRedemptions ?? 1,
+        expiresAt: request.body?.expiresAt ? new Date(request.body.expiresAt) : null
+      });
+      return reply.status(201).send(invite);
+    } catch (error) {
+      return reply.status(400).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.post<{ Params: { inviteId: string } }>("/admin/invites/:inviteId/revoke", async (request, reply) => {
+    if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
+    const identity = await requireIdentity(request, reply, authService);
+    if (!identity) return reply;
+
+    try {
+      return reply.status(200).send(await inviteService.revokeInvite(request.params.inviteId));
+    } catch (error) {
+      return reply.status(400).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.post<{ Body: { code?: string } }>("/invites/redeem", async (request, reply) => {
+    if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
+    const identity = await requireIdentity(request, reply, authService);
+    if (!identity) return reply;
+
+    try {
+      const result = await inviteService.redeemInvite({
+        code: request.body?.code ?? "",
+        userId: identity.userId,
+        email: identity.email
+      });
+      return reply.status(200).send(result);
+    } catch (error) {
+      return reply.status(400).send({ error: errorMessage(error) });
+    }
+  });
+
   return server;
 }
 
@@ -96,4 +151,26 @@ function defaultAuthService(config: Config): AuthService {
 
 export function buildOidcProvider(config: Config): OidcProvider {
   return new OidcProvider(config.oidc);
+}
+
+async function requireIdentity(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  authService: AuthService
+): Promise<(OidcIdentity & { userId: string }) | null> {
+  const sessionToken = request.cookies[sessionCookieName];
+  if (!sessionToken) {
+    reply.status(401).send("session required");
+    return null;
+  }
+  const identity = await authService.session(sessionToken);
+  if (!identity?.userId) {
+    reply.status(401).send("session required");
+    return null;
+  }
+  return { ...identity, userId: identity.userId };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "request failed";
 }

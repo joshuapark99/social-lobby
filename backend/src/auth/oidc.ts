@@ -11,6 +11,7 @@ export type OidcProviderOptions = {
 };
 
 export type OidcIdentity = {
+  userId?: string;
   provider: string;
   subject: string;
   email: string;
