@@ -1,0 +1,11 @@
+{
+  "theme": "evening-rooftop",
+  "backgroundAsset": "rooms/rooftop.png",
+  "avatarStyleSet": "soft-rounded",
+  "objectPack": "rooftop-furniture-v1",
+  "width": 2200,
+  "height": 1400,
+  "spawnPoints": [{ "x": 280, "y": 380 }],
+  "collision": [{ "x": 900, "y": 220, "w": 340, "h": 70 }],
+  "teleports": [{ "label": "Lobby", "targetRoom": "main-lobby" }]
+}
