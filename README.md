@@ -27,4 +27,5 @@ npm run dev
 ```
 
 See `docs/development.md` for local development details and
-`docs/collaboration.md` for the branch and release flow.
+`docs/database.md` for PostgreSQL setup. See `docs/collaboration.md` for the
+branch and release flow.
