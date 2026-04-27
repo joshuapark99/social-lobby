@@ -8,9 +8,14 @@ import (
 	"social-lobby/backend/internal/config"
 )
 
-func NewRouter(_ config.Config) http.Handler {
+func NewRouter(cfg config.Config) http.Handler {
+	return NewRouterWithAuth(cfg, newConfiguredAuthService(cfg))
+}
+
+func NewRouterWithAuth(cfg config.Config, authService AuthService) http.Handler {
 	router := chi.NewRouter()
 	router.Get("/healthz", handleHealthz)
+	registerAuthRoutes(router, cfg, authService)
 	return router
 }
 
