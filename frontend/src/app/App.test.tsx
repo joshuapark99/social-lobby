@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
-import type { SessionState } from "./session";
+import type { SessionState } from "../auth/session";
 
 function renderApp(pathname: string, session: SessionState = { status: "anonymous" }) {
   const apiClient = {

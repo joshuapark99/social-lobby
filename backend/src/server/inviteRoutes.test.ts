@@ -3,6 +3,7 @@ import { buildServer } from "./server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
 import type { InviteService } from "../invites/service.js";
+import { registerInviteRoutes } from "../invites/routes.js";
 
 function authService(userId = "user-1", email = "person@example.com"): AuthService {
   return {
@@ -29,6 +30,10 @@ function inviteService(overrides: Partial<InviteService> = {}): InviteService {
 }
 
 describe("invite routes", () => {
+  test("invite route registration is owned by the invites module", () => {
+    expect(registerInviteRoutes).toEqual(expect.any(Function));
+  });
+
   test("POST /admin/invites creates an invite for an authenticated admin session", async () => {
     const invites = inviteService();
     const server = buildServer({ config: loadConfig({}), authService: authService("admin-1"), inviteService: invites });
