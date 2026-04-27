@@ -1,0 +1,37 @@
+import { describe, expect, test, vi } from "vitest";
+import { createAuthService, type AuthStore } from "./service.js";
+import type { OidcIdentity } from "./oidc.js";
+
+describe("createAuthService", () => {
+  test("exchanges OIDC identity, persists hashed session, and returns CSRF token", async () => {
+    const identity: OidcIdentity = { provider: "google", subject: "subject", email: "person@example.com" };
+    const provider = {
+      authorizationUrl: vi.fn((state: string) => `https://provider.example/auth?state=${state}`),
+      exchange: vi.fn(async () => identity)
+    };
+    const store: AuthStore = {
+      findOrCreateUserByIdentity: vi.fn(async () => "user-1"),
+      createSession: vi.fn(async () => undefined),
+      findIdentityBySessionHash: vi.fn(async () => identity),
+      revokeSession: vi.fn(async () => undefined)
+    };
+    const service = createAuthService({
+      provider,
+      store,
+      now: () => new Date("2026-01-01T00:00:00Z")
+    });
+
+    const login = await service.loginUrl();
+    const callback = await service.completeLogin("code", "state");
+    const session = await service.session(callback.sessionToken);
+    await service.logout(callback.sessionToken);
+
+    expect(login.redirectUrl).toContain("state=");
+    expect(store.findOrCreateUserByIdentity).toHaveBeenCalledWith(identity);
+    expect(store.createSession).toHaveBeenCalledWith("user-1", expect.stringMatching(/^[a-f0-9]{64}$/), new Date("2026-01-31T00:00:00Z"));
+    expect(callback.identity).toEqual(identity);
+    expect(callback.sessionToken).not.toEqual(callback.csrfToken);
+    expect(session).toEqual(identity);
+    expect(store.revokeSession).toHaveBeenCalledWith(expect.stringMatching(/^[a-f0-9]{64}$/));
+  });
+});

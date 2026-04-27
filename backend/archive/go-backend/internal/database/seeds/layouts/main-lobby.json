@@ -1,0 +1,11 @@
+{
+  "theme": "cozy-lobby",
+  "backgroundAsset": "rooms/main-lobby.png",
+  "avatarStyleSet": "soft-rounded",
+  "objectPack": "lobby-furniture-v1",
+  "width": 2400,
+  "height": 1600,
+  "spawnPoints": [{ "x": 320, "y": 420 }],
+  "collision": [{ "x": 520, "y": 360, "w": 220, "h": 90 }],
+  "teleports": [{ "label": "Rooftop", "targetRoom": "rooftop" }]
+}
