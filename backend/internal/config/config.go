@@ -9,7 +9,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		HTTPAddr:    envOrDefault("HTTP_ADDR", ":8080"),
+		HTTPAddr:    envOrDefault("HTTP_ADDR", ":8081"),
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 	}
 }
