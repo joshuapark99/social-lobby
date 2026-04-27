@@ -6,8 +6,10 @@ Run commands from the repository root unless a section says otherwise.
 
 ```bash
 cd backend
-go test ./...
-go run ./cmd/server
+npm install
+npm test
+npm run build
+npm run dev
 ```
 
 The backend listens on `:8081` by default and exposes `GET /healthz`.
@@ -36,9 +38,9 @@ access tokens in frontend JavaScript for normal browser sessions.
 
 SL-004 keeps the database layer portable PostgreSQL:
 
-- SQL migrations live in `backend/internal/database/migrations`.
-- Seed SQL lives in `backend/internal/database/seeds`.
-- Reviewable room layout JSON lives in `backend/internal/database/seeds/layouts`.
+- SQL migrations live in `backend/src/db/migrations`.
+- Seed SQL lives in `backend/src/db/seeds`.
+- Reviewable room layout JSON lives in `backend/src/db/seeds/layouts`.
 - `DATABASE_URL` configures the application database connection string.
 - `TEST_DATABASE_URL` configures the isolated integration-test database.
 - Auth sessions are stored by hashed token in the `user_sessions` table.
@@ -60,25 +62,23 @@ Run migrations and seed data against the application database with:
 
 ```bash
 cd backend
-GOCACHE=/home/jpark/development/social-lobby/.cache/go-build \
-  go run ./cmd/migrate -db app
+npm run migrate -- --db=app
 ```
 
 Run migrations and seed data against the test database with:
 
 ```bash
 cd backend
-GOCACHE=/home/jpark/development/social-lobby/.cache/go-build \
-  go run ./cmd/migrate -db test
+npm run migrate -- --db=test
 ```
 
-Pass `-seed=false` to apply only schema migrations.
+Pass `--seed=false` to apply only schema migrations.
 
 Run the normal backend tests with:
 
 ```bash
 cd backend
-GOCACHE=../.cache/go-build go test ./...
+npm test
 ```
 
 To verify migrations against a real database, point `TEST_DATABASE_URL` at an
@@ -88,8 +88,7 @@ data.
 ```bash
 cd backend
 TEST_DATABASE_URL=postgres://social_lobby:social_lobby@localhost:5432/social_lobby_test?sslmode=disable \
-  GOCACHE=../.cache/go-build \
-  go test ./internal/database
+  npm run migrate -- --db=test
 ```
 
 Development rollback strategy: treat local databases as disposable while the
