@@ -34,6 +34,19 @@ OIDC_REDIRECT_URL=http://localhost:8081/auth/callback
 Use `SESSION_COOKIE_SECURE=true` when serving over HTTPS. Do not store provider
 access tokens in frontend JavaScript for normal browser sessions.
 
+### Invite Gate
+
+SL-006 keeps invite access behind the backend session and CSRF boundary.
+
+- `POST /admin/invites` creates an invite for the default community.
+- `POST /admin/invites/:inviteId/revoke` revokes an invite.
+- `POST /invites/redeem` redeems an invite for the authenticated browser
+  session and creates the default community membership.
+- Unsafe invite routes require the readable `sl_csrf` cookie value in the
+  `X-CSRF-Token` header.
+- Email-targeted invites compare against the authenticated OIDC email after
+  lowercasing and trimming.
+
 ### Database Migrations
 
 SL-004 keeps the database layer portable PostgreSQL:
@@ -44,6 +57,8 @@ SL-004 keeps the database layer portable PostgreSQL:
 - `DATABASE_URL` configures the application database connection string.
 - `TEST_DATABASE_URL` configures the isolated integration-test database.
 - Auth sessions are stored by hashed token in the `user_sessions` table.
+- Invites are stored by hashed code in the `invites` table. Raw invite codes
+  are only returned at creation time.
 - Row level security is enabled on durable application tables as a guardrail.
   Policy definitions and `FORCE ROW LEVEL SECURITY` are deferred until the
   backend has request-scoped database authorization context.
