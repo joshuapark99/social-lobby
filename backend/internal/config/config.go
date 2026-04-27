@@ -3,12 +3,14 @@ package config
 import "os"
 
 type Config struct {
-	HTTPAddr string
+	HTTPAddr    string
+	DatabaseURL string
 }
 
 func Load() Config {
 	return Config{
-		HTTPAddr: envOrDefault("HTTP_ADDR", ":8080"),
+		HTTPAddr:    envOrDefault("HTTP_ADDR", ":8080"),
+		DatabaseURL: os.Getenv("DATABASE_URL"),
 	}
 }
 
