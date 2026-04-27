@@ -41,6 +41,7 @@ func TestApplyCreatesSchemaAndSeedDataAgainstPostgres(t *testing.T) {
 		"room_messages",
 		"visited_rooms",
 		"temporary_room_lifecycle_records",
+		"user_sessions",
 	} {
 		var exists bool
 		err := db.QueryRowContext(ctx, `SELECT to_regclass('public.' || $1) IS NOT NULL`, table).Scan(&exists)
