@@ -82,6 +82,54 @@ h2 {
   font-size: 0.92rem;
 }
 
+.invite-form {
+  max-width: 420px;
+}
+
+.invite-form label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.inline-form {
+  display: flex;
+  gap: 8px;
+}
+
+.inline-form input {
+  border: 1px solid #b9c4cc;
+  border-radius: 6px;
+  flex: 1;
+  font: inherit;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.inline-form button {
+  background: #1f6f68;
+  border: 1px solid #1a5d57;
+  border-radius: 6px;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  padding: 9px 14px;
+}
+
+.inline-form button:disabled {
+  background: #8ca6a3;
+  border-color: #8ca6a3;
+}
+
+.form-message {
+  color: #1f6f45;
+  margin-top: 12px;
+}
+
+.form-message-error {
+  color: #8f2c1f;
+}
+
 .room-layout {
   display: grid;
   gap: 16px;

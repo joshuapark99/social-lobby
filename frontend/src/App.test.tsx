@@ -1,13 +1,17 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type { SessionState } from "./session";
 
 function renderApp(pathname: string, session: SessionState = { status: "anonymous" }) {
+  const apiClient = {
+    baseUrl: "/api",
+    redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+  };
   return render(
     <App
-      apiClient={{ baseUrl: "/api" }}
+      apiClient={apiClient}
       bootstrapSession={() => Promise.resolve(session)}
       initialPathname={pathname}
       realtimeClient={{ status: "idle" }}
@@ -27,7 +31,27 @@ describe("App", () => {
     renderApp("/invite/friend-code");
 
     expect(await screen.findByRole("heading", { name: "Redeem invite" })).toBeInTheDocument();
-    expect(screen.getByText("Invite code: friend-code")).toBeInTheDocument();
+    expect(screen.getByLabelText("Invite code")).toHaveValue("friend-code");
+  });
+
+  it("redeems the invite code through the API client", async () => {
+    const apiClient = {
+      baseUrl: "/api",
+      redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+    };
+    render(
+      <App
+        apiClient={apiClient}
+        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        initialPathname="/invite/friend-code"
+        realtimeClient={{ status: "idle" }}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Redeem" }));
+
+    await waitFor(() => expect(apiClient.redeemInvite).toHaveBeenCalledWith("friend-code"));
+    expect(screen.getByText("Invite accepted.")).toBeInTheDocument();
   });
 
   it("renders the lobby route", async () => {
