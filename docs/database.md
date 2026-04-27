@@ -20,6 +20,16 @@ postgres://social_lobby:social_lobby@localhost:5432/social_lobby_test?sslmode=di
 These values match `.env.example` and the backend `TEST_DATABASE_URL` integration
 test flow.
 
+The migrate command reads `DATABASE_URL` for the application database and
+`TEST_DATABASE_URL` for the integration-test database. From `backend/`, load
+local `.env` values with:
+
+```bash
+set -a
+source ../.env
+set +a
+```
+
 ## Local Setup
 
 Keep database commands scoped to this Compose project. On a shared development
@@ -85,6 +95,28 @@ Then run the backend tests:
 cd backend
 GOCACHE=/tmp/social-lobby-go-build go test ./...
 ```
+
+Run migrations and seed data against the application database:
+
+```bash
+cd backend
+GOCACHE=/tmp/social-lobby-go-build \
+  go run ./cmd/migrate -db app
+```
+
+Run migrations and seed data against the integration-test database:
+
+```bash
+cd backend
+GOCACHE=/tmp/social-lobby-go-build \
+  go run ./cmd/migrate -db test
+```
+
+Pass `-seed=false` to apply only schema migrations.
+
+Current migrations enable row level security on durable application tables as a
+guardrail. Policy definitions and `FORCE ROW LEVEL SECURITY` are intentionally
+deferred until the backend has request-scoped database authorization context.
 
 Run the real Postgres migration integration check:
 

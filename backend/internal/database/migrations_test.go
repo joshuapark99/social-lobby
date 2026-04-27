@@ -20,12 +20,38 @@ func TestMigrationsCreateRequiredDurableTables(t *testing.T) {
 		"room_messages",
 		"visited_rooms",
 		"temporary_room_lifecycle_records",
+		"user_sessions",
 	}
 
 	sql := strings.ToLower(strings.Join(MigrationSQL(), "\n"))
 
 	for _, table := range requiredTables {
 		want := "create table if not exists " + table
+		if !strings.Contains(sql, want) {
+			t.Fatalf("expected migrations to include %q", want)
+		}
+	}
+}
+
+func TestMigrationsEnableRowLevelSecurityForDurableTables(t *testing.T) {
+	requiredTables := []string{
+		"users",
+		"linked_identities",
+		"communities",
+		"memberships",
+		"invites",
+		"room_layouts",
+		"rooms",
+		"room_messages",
+		"visited_rooms",
+		"temporary_room_lifecycle_records",
+		"user_sessions",
+	}
+
+	sql := strings.ToLower(strings.Join(MigrationSQL(), "\n"))
+
+	for _, table := range requiredTables {
+		want := "alter table " + table + " enable row level security"
 		if !strings.Contains(sql, want) {
 			t.Fatalf("expected migrations to include %q", want)
 		}
