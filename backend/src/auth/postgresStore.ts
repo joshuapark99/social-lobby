@@ -62,8 +62,9 @@ export class PostgresAuthStore implements AuthStore {
       provider_subject: string;
       email: string;
       display_name: string;
+      user_id: string;
     }>(
-      `SELECT li.provider, li.provider_subject, li.email, u.display_name
+      `SELECT us.user_id, li.provider, li.provider_subject, li.email, u.display_name
        FROM user_sessions us
        JOIN users u ON u.id = us.user_id
        JOIN linked_identities li ON li.user_id = u.id
@@ -76,7 +77,7 @@ export class PostgresAuthStore implements AuthStore {
     );
     const row = result.rows[0];
     if (!row) return null;
-    return { provider: row.provider, subject: row.provider_subject, email: row.email, name: row.display_name };
+    return { userId: row.user_id, provider: row.provider, subject: row.provider_subject, email: row.email, name: row.display_name };
   }
 
   async revokeSession(tokenHash: string): Promise<void> {
