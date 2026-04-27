@@ -1,10 +1,10 @@
 # Social Lobby
 
-Invite-only social web app with a Go backend and React/Vite frontend.
+Invite-only social web app with a TypeScript Fastify backend and React/Vite frontend.
 
 ## Workspaces
 
-- `backend`: Go HTTP service.
+- `backend`: TypeScript Fastify HTTP service.
 - `frontend`: React and Vite browser app.
 
 ## Common Commands
@@ -13,8 +13,10 @@ Backend:
 
 ```bash
 cd backend
-go test ./...
-go run ./cmd/server
+npm install
+npm test
+npm run build
+npm run dev
 ```
 
 Frontend:

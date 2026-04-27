@@ -17,8 +17,8 @@ Integration-test database:
 postgres://social_lobby:social_lobby@localhost:5432/social_lobby_test?sslmode=disable
 ```
 
-These values match `.env.example` and the backend `TEST_DATABASE_URL` integration
-test flow.
+These values match `.env.example` and the backend `TEST_DATABASE_URL` migration
+flow.
 
 The migrate command reads `DATABASE_URL` for the application database and
 `TEST_DATABASE_URL` for the integration-test database. From `backend/`, load
@@ -65,7 +65,7 @@ docker compose down
 
 - Docker Engine or Docker Desktop
 - Docker Compose v2
-- Go matching the backend module version
+- Node.js and npm matching the backend package
 
 ## Startup
 
@@ -93,26 +93,25 @@ Then run the backend tests:
 
 ```bash
 cd backend
-GOCACHE=/tmp/social-lobby-go-build go test ./...
+npm install
+npm test
 ```
 
 Run migrations and seed data against the application database:
 
 ```bash
 cd backend
-GOCACHE=/tmp/social-lobby-go-build \
-  go run ./cmd/migrate -db app
+npm run migrate -- --db=app
 ```
 
 Run migrations and seed data against the integration-test database:
 
 ```bash
 cd backend
-GOCACHE=/tmp/social-lobby-go-build \
-  go run ./cmd/migrate -db test
+npm run migrate -- --db=test
 ```
 
-Pass `-seed=false` to apply only schema migrations.
+Pass `--seed=false` to apply only schema migrations.
 
 Current migrations enable row level security on durable application tables as a
 guardrail. Policy definitions and `FORCE ROW LEVEL SECURITY` are intentionally
@@ -123,8 +122,7 @@ Run the real Postgres migration integration check:
 ```bash
 cd backend
 TEST_DATABASE_URL='postgres://social_lobby:social_lobby@localhost:5432/social_lobby_test?sslmode=disable' \
-  GOCACHE=/tmp/social-lobby-go-build \
-  go test ./internal/database -run TestApplyCreatesSchemaAndSeedDataAgainstPostgres -count=1 -v
+  npm run migrate -- --db=test
 ```
 
 If you used a custom host port, replace `5432` in `TEST_DATABASE_URL` with that
