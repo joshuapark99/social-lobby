@@ -1,0 +1,37 @@
+import type { FastifyInstance } from "fastify";
+import { requireIdentity } from "../auth/http.js";
+import type { AuthService } from "../auth/service.js";
+import type { RoomService } from "./service.js";
+
+export function registerRoomRoutes(
+  server: FastifyInstance,
+  options: { authService: AuthService; roomService: RoomService }
+): void {
+  server.get("/communities/default/rooms", async (request, reply) => {
+    const identity = await requireIdentity(request, reply, options.authService);
+    if (!identity) return reply;
+
+    try {
+      return reply.status(200).send(await options.roomService.listDefaultCommunityRooms());
+    } catch (error) {
+      return reply.status(500).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.get<{ Params: { roomSlug: string } }>("/rooms/:roomSlug", async (request, reply) => {
+    const identity = await requireIdentity(request, reply, options.authService);
+    if (!identity) return reply;
+
+    try {
+      const room = await options.roomService.roomBySlug(request.params.roomSlug);
+      if (!room) return reply.status(404).send({ error: "room not found" });
+      return reply.status(200).send(room);
+    } catch (error) {
+      return reply.status(500).send({ error: errorMessage(error) });
+    }
+  });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "request failed";
+}
