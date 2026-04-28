@@ -75,11 +75,11 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
 }
 
 describe("App", () => {
-  it("renders the login route", async () => {
-    renderApp("/login");
+  it("renders the welcome route with a Google OAuth entry link", async () => {
+    renderApp("/welcome");
 
-    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
-    expect(screen.getByText("Continue with Google to enter the lobby.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Welcome to Social Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute("href", "/api/auth/login");
   });
 
   it("renders the invite redemption route", async () => {
@@ -112,11 +112,12 @@ describe("App", () => {
   });
 
   it("renders the lobby route", async () => {
-    renderApp("/lobby");
+    renderApp("/lobby", { status: "authenticated", user: { displayName: "June" } });
 
     expect(await screen.findByRole("heading", { name: "Lobby" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Default Community" })).toBeInTheDocument();
     expect(screen.getByText("Main Lobby")).toBeInTheDocument();
+    expect(screen.getByText("Signed in as June")).toBeInTheDocument();
   });
 
   it("renders the room route with canvas and chat regions", async () => {
@@ -136,6 +137,43 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("Not signed in")).toBeInTheDocument();
     });
+  });
+
+  it("redirects anonymous lobby access to the login view", async () => {
+    renderApp("/lobby", { status: "anonymous" });
+
+    expect(await screen.findByRole("heading", { name: "Welcome to Social Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute("href", "/api/auth/login");
+  });
+
+  it("redirects anonymous room access to the welcome view", async () => {
+    renderApp("/rooms/main-hall", { status: "anonymous" });
+
+    expect(await screen.findByRole("heading", { name: "Welcome to Social Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continue with Google" })).toHaveAttribute("href", "/api/auth/login");
+    expect(screen.queryByRole("region", { name: "Room canvas" })).not.toBeInTheDocument();
+  });
+
+  it("does not mount protected room content while session bootstrap is loading", () => {
+    const apiClient = {
+      baseUrl: "/api",
+      redeemInvite: vi.fn(),
+      listRooms: vi.fn(),
+      getRoom: vi.fn(),
+    };
+    render(
+      <App
+        apiClient={apiClient}
+        bootstrapSession={() => new Promise<SessionState>(() => undefined)}
+        initialPathname="/rooms/main-hall"
+        realtimeClient={realtimeClient()}
+      />,
+    );
+
+    expect(screen.getByText("Checking session...")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome to Social Lobby" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Room canvas" })).not.toBeInTheDocument();
+    expect(apiClient.getRoom).not.toHaveBeenCalled();
   });
 
   it("renders session bootstrap errors", async () => {

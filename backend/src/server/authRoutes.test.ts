@@ -30,7 +30,7 @@ describe("auth routes", () => {
     const auth = fakeAuthService();
     const server = buildServer({ config: loadConfig({}), authService: auth });
 
-    const response = await server.inject({ method: "GET", url: "/auth/login" });
+    const response = await server.inject({ method: "GET", url: "api/auth/login" });
 
     expect(response.statusCode).toBe(302);
     expect(response.headers.location).toBe("https://accounts.google.com/o/oauth2/v2/auth?state=state-token");
@@ -48,11 +48,11 @@ describe("auth routes", () => {
     const server = buildServer({
       config: loadConfig({
         OIDC_CLIENT_ID: "client-id",
-        OIDC_REDIRECT_URL: "http://localhost:8081/auth/callback"
+        OIDC_REDIRECT_URL: "http://localhost:5173/api/auth/callback"
       })
     });
 
-    const response = await server.inject({ method: "GET", url: "/auth/login" });
+    const response = await server.inject({ method: "GET", url: "api/auth/login" });
 
     expect(response.statusCode).toBe(302);
     expect(response.headers.location).toContain("https://accounts.google.com/o/oauth2/v2/auth?");
@@ -65,28 +65,31 @@ describe("auth routes", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: "/auth/callback?code=code&state=state-token",
+      url: "api/auth/callback?code=code&state=state-token",
       cookies: { sl_oidc_state: "state-token" }
     });
 
     expect(response.statusCode).toBe(401);
   });
 
-  test("GET /auth/callback validates state and sets session plus CSRF cookies", async () => {
+  test("GET /auth/callback validates state, sets session plus CSRF cookies, and redirects to the lobby", async () => {
     const auth = fakeAuthService();
     const server = buildServer({
-      config: loadConfig({ SESSION_COOKIE_SECURE: "true" }),
+      config: loadConfig({
+        SESSION_COOKIE_SECURE: "true",
+        OIDC_REDIRECT_URL: "http://localhost:5173/api/auth/callback"
+      }),
       authService: auth
     });
 
     const response = await server.inject({
       method: "GET",
-      url: "/auth/callback?code=code&state=state-token",
+      url: "api/auth/callback?code=code&state=state-token",
       cookies: { sl_oidc_state: "state-token" }
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ email: "person@example.com" });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("http://localhost:5173/lobby");
     expect(response.cookies).toContainEqual(
       expect.objectContaining({
         name: "sl_session",
@@ -116,7 +119,7 @@ describe("auth routes", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: "/auth/session",
+      url: "api/auth/session",
       cookies: { sl_session: "session-token" }
     });
 
@@ -131,7 +134,7 @@ describe("auth routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/auth/logout",
+      url: "api/auth/logout",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" }
     });
@@ -148,7 +151,7 @@ describe("auth routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/auth/logout",
+      url: "api/auth/logout",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "wrong-token" }
     });

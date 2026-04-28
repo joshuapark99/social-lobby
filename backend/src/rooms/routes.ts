@@ -7,7 +7,7 @@ export function registerRoomRoutes(
   server: FastifyInstance,
   options: { authService: AuthService; roomService: RoomService }
 ): void {
-  server.get("/communities/default/rooms", async (request, reply) => {
+  server.get("/api/communities/default/rooms", async (request, reply) => {
     const identity = await requireIdentity(request, reply, options.authService);
     if (!identity) return reply;
 
@@ -18,7 +18,7 @@ export function registerRoomRoutes(
     }
   });
 
-  server.get<{ Params: { roomSlug: string } }>("/rooms/:roomSlug", async (request, reply) => {
+  server.get<{ Params: { roomSlug: string } }>("/api/rooms/:roomSlug", async (request, reply) => {
     const identity = await requireIdentity(request, reply, options.authService);
     if (!identity) return reply;
 

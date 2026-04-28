@@ -6,7 +6,7 @@ describe("server", () => {
   test("GET /healthz returns the existing health contract", async () => {
     const server = buildServer({ config: loadConfig({}) });
 
-    const response = await server.inject({ method: "GET", url: "/healthz" });
+    const response = await server.inject({ method: "GET", url: "api/healthz" });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("application/json");
@@ -16,7 +16,7 @@ describe("server", () => {
   test("POST /healthz is not allowed", async () => {
     const server = buildServer({ config: loadConfig({}) });
 
-    const response = await server.inject({ method: "POST", url: "/healthz" });
+    const response = await server.inject({ method: "POST", url: "api/healthz" });
 
     expect(response.statusCode).toBe(405);
   });

@@ -20,7 +20,7 @@ export function registerRealtimeRoutes(
 
   server.route<{ Params: { roomSlug: string } }>({
     method: "GET",
-    url: "/rooms/:roomSlug/ws",
+    url: "/api/rooms/:roomSlug/ws",
     handler: async (_request, reply) => reply.status(426).send({ error: "websocket upgrade required" }),
     preValidation: async (request, reply) => {
       const identity = await requireRealtimeIdentity(request, reply, options.authService);
@@ -78,8 +78,10 @@ export function registerRealtimeRoutes(
             return;
           }
 
-          const occupant = createOccupant(identity, room);
-          joinedConnectionId = occupant.connectionId;
+          const authenticatedIdentity = identity as OidcIdentity & { userId: string };
+          const occupant = createOccupant(authenticatedIdentity, room);
+          const connectionId = occupant.connectionId;
+          joinedConnectionId = connectionId;
           const occupants = presenceRegistry.join(room.room.slug, occupant, connection);
 
           send(
@@ -96,7 +98,7 @@ export function registerRealtimeRoutes(
           );
 
           broadcast(
-            presenceRegistry.peers(room.room.slug, occupant.connectionId),
+            presenceRegistry.peers(room.room.slug, connectionId),
             buildServerEvent("presence.joined", { occupant })
           );
         } catch (error) {
@@ -108,11 +110,12 @@ export function registerRealtimeRoutes(
       connection.on("close", () => {
         if (cleanedUp || !joinedConnectionId) return;
         cleanedUp = true;
+        const connectionId = joinedConnectionId;
 
         void roomPromise.then((room) => {
           if (!room) return;
 
-          const removed = presenceRegistry.leave(room.room.slug, joinedConnectionId);
+          const removed = presenceRegistry.leave(room.room.slug, connectionId);
           if (!removed) return;
 
           broadcast(
@@ -135,7 +138,11 @@ async function requireRealtimeIdentity(
 ): Promise<(OidcIdentity & { userId: string }) | null> {
   const identity = await requireIdentity(request, reply, authService);
   if (!identity) return null;
-  return identity;
+  if (!identity.userId) {
+    await reply.status(401).send("session required");
+    return null;
+  }
+  return identity as OidcIdentity & { userId: string };
 }
 
 function createOccupant(identity: OidcIdentity & { userId: string }, room: RoomMetadataResponse): PresenceOccupant {

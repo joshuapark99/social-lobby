@@ -79,7 +79,7 @@ describe("room routes", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: "/communities/default/rooms",
+      url: "api/communities/default/rooms",
       cookies: { sl_session: "session-token" }
     });
 
@@ -102,7 +102,7 @@ describe("room routes", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: "/rooms/main-lobby",
+      url: "api/rooms/main-lobby",
       cookies: { sl_session: "session-token" }
     });
 
@@ -125,7 +125,7 @@ describe("room routes", () => {
 
     const response = await server.inject({
       method: "GET",
-      url: "/rooms/missing-room",
+      url: "api/rooms/missing-room",
       cookies: { sl_session: "session-token" }
     });
 

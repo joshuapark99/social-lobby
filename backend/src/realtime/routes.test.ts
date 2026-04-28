@@ -69,11 +69,11 @@ describe("realtime room routes", () => {
   });
 
   test("rejects missing session cookies", async () => {
-    await expect(server.injectWS("/rooms/main-lobby/ws")).rejects.toThrow();
+    await expect(server.injectWS("/api/rooms/main-lobby/ws")).rejects.toThrow();
   });
 
   test("sends a room snapshot after a valid room.join", async () => {
-    const socket = rememberSocket(await server.injectWS("/rooms/main-lobby/ws", {
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
     }));
 
@@ -96,14 +96,14 @@ describe("realtime room routes", () => {
   });
 
   test("fans out presence.joined to existing room occupants", async () => {
-    const first = rememberSocket(await server.injectWS("/rooms/main-lobby/ws", {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
     }));
     const firstSnapshotPromise = onceMessage(first);
     first.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
     await firstSnapshotPromise;
 
-    const second = rememberSocket(await server.injectWS("/rooms/main-lobby/ws", {
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token-2" }
     }));
     const secondSnapshotPromise = onceMessage(second);
@@ -119,14 +119,14 @@ describe("realtime room routes", () => {
   });
 
   test("fans out presence.left when an occupant disconnects", async () => {
-    const first = rememberSocket(await server.injectWS("/rooms/main-lobby/ws", {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
     }));
     const firstSnapshotPromise = onceMessage(first);
     first.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
     await firstSnapshotPromise;
 
-    const second = rememberSocket(await server.injectWS("/rooms/main-lobby/ws", {
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token-2" }
     }));
     const secondSnapshotPromise = onceMessage(second);
@@ -146,7 +146,7 @@ describe("realtime room routes", () => {
   });
 
   test("returns an error event for invalid envelope versions", async () => {
-    const socket = rememberSocket(await server.injectWS("/rooms/main-lobby/ws", {
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
     }));
 
@@ -167,7 +167,7 @@ describe("realtime room routes", () => {
 
 function onceMessage(socket: WebSocket): Promise<WebSocket.RawData> {
   return new Promise((resolve, reject) => {
-    socket.once("message", (data) => resolve(data));
+    socket.once("message", (data: any) => resolve(data));
     socket.once("error", reject);
   });
 }

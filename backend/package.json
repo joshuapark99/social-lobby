@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx --env-file=../.env src/main.ts",
     "migrate": "tsx src/db/migrate.ts",
     "start": "node dist/main.js",
     "test": "vitest run"
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/node": "^22.13.10",
     "@types/pg": "^8.11.11",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8",
