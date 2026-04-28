@@ -1,0 +1,193 @@
+import { randomUUID } from "node:crypto";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type WebSocket from "ws";
+import { sessionCookieName } from "../auth/cookies.js";
+import { requireIdentity } from "../auth/http.js";
+import type { AuthService, OidcIdentity } from "../auth/service.js";
+import type { RoomMetadataResponse, RoomService } from "../rooms/service.js";
+import { InMemoryPresenceRegistry } from "./presence.js";
+import { buildErrorEvent, buildServerEvent, parseClientEnvelope, parseRoomJoinEvent, type PresenceOccupant } from "./protocol.js";
+
+export function registerRealtimeRoutes(
+  server: FastifyInstance,
+  options: {
+    authService: AuthService;
+    roomService: RoomService;
+    presenceRegistry?: InMemoryPresenceRegistry;
+  }
+): void {
+  const presenceRegistry = options.presenceRegistry ?? new InMemoryPresenceRegistry();
+
+  server.route<{ Params: { roomSlug: string } }>({
+    method: "GET",
+    url: "/rooms/:roomSlug/ws",
+    handler: async (_request, reply) => reply.status(426).send({ error: "websocket upgrade required" }),
+    preValidation: async (request, reply) => {
+      const identity = await requireRealtimeIdentity(request, reply, options.authService);
+      if (!identity) return reply;
+
+      const room = await options.roomService.roomBySlug(request.params.roomSlug);
+      if (!room) {
+        return reply.status(404).send({ error: "room not found" });
+      }
+
+      request.headers["x-room-slug"] = request.params.roomSlug;
+    },
+    wsHandler: (socket, request) => {
+      const connection = websocketConnection(socket);
+      if (!connection) {
+        return;
+      }
+
+      let joinedConnectionId: string | null = null;
+      let cleanedUp = false;
+      const sessionToken = cookieValue(request.headers.cookie, sessionCookieName) ?? "";
+      const roomSlug = typeof request.headers["x-room-slug"] === "string" ? request.headers["x-room-slug"] : undefined;
+      if (!roomSlug) {
+        return;
+      }
+
+      const identityPromise = options.authService.session(sessionToken);
+      const roomPromise = options.roomService.roomBySlug(roomSlug);
+
+      connection.on("message", async (message) => {
+        try {
+          const envelope = parseClientEnvelope(message.toString());
+          if (envelope.type !== "room.join") {
+            send(connection, buildErrorEvent("unsupported_event", `unsupported realtime event type: ${envelope.type}`, envelope.requestId));
+            return;
+          }
+
+          if (joinedConnectionId) {
+            send(connection, buildErrorEvent("already_joined", "room.join has already been processed", envelope.requestId));
+            return;
+          }
+
+          const join = parseRoomJoinEvent(message.toString());
+          if (join.payload.roomSlug !== roomSlug) {
+            send(connection, buildErrorEvent("room_mismatch", "room.join roomSlug must match the websocket room", join.requestId));
+            connection.close(1008, "room mismatch");
+            return;
+          }
+
+          const identity = await identityPromise;
+          const room = await roomPromise;
+          if (!identity?.userId || !room) {
+            send(connection, buildErrorEvent("session_required", "session required", join.requestId));
+            connection.close(1008, "session required");
+            return;
+          }
+
+          const occupant = createOccupant(identity, room);
+          joinedConnectionId = occupant.connectionId;
+          const occupants = presenceRegistry.join(room.room.slug, occupant, connection);
+
+          send(
+            connection,
+            buildServerEvent("room.snapshot", {
+              room: {
+                slug: room.room.slug,
+                name: room.room.name,
+                layoutVersion: room.room.layoutVersion
+              },
+              self: occupant,
+              occupants
+            }, join.requestId)
+          );
+
+          broadcast(
+            presenceRegistry.peers(room.room.slug, occupant.connectionId),
+            buildServerEvent("presence.joined", { occupant })
+          );
+        } catch (error) {
+          send(connection, buildErrorEvent("invalid_event", errorMessage(error)));
+          connection.close(1008, "invalid event");
+        }
+      });
+
+      connection.on("close", () => {
+        if (cleanedUp || !joinedConnectionId) return;
+        cleanedUp = true;
+
+        void roomPromise.then((room) => {
+          if (!room) return;
+
+          const removed = presenceRegistry.leave(room.room.slug, joinedConnectionId);
+          if (!removed) return;
+
+          broadcast(
+            presenceRegistry.peers(room.room.slug, removed.connectionId),
+            buildServerEvent("presence.left", {
+              connectionId: removed.connectionId,
+              userId: removed.userId
+            })
+          );
+        });
+      });
+    }
+  });
+}
+
+async function requireRealtimeIdentity(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  authService: AuthService
+): Promise<(OidcIdentity & { userId: string }) | null> {
+  const identity = await requireIdentity(request, reply, authService);
+  if (!identity) return null;
+  return identity;
+}
+
+function createOccupant(identity: OidcIdentity & { userId: string }, room: RoomMetadataResponse): PresenceOccupant {
+  const spawn = room.room.layout.spawnPoints[0];
+  return {
+    connectionId: randomUUID(),
+    userId: identity.userId,
+    email: identity.email,
+    name: identity.name,
+    position: { x: spawn.x, y: spawn.y }
+  };
+}
+
+function broadcast(sockets: WebSocket[], event: object): void {
+  const payload = JSON.stringify(event);
+  sockets.forEach((socket) => socket.send(payload));
+}
+
+function send(socket: WebSocket, event: object): void {
+  socket.send(JSON.stringify(event));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "invalid realtime event";
+}
+
+function websocketConnection(input: unknown): WebSocket | null {
+  if (hasWebsocketMethods(input)) {
+    return input;
+  }
+  if (typeof input === "object" && input !== null && "socket" in input && hasWebsocketMethods((input as { socket?: unknown }).socket)) {
+    return (input as { socket: WebSocket }).socket;
+  }
+  return null;
+}
+
+function hasWebsocketMethods(input: unknown): input is WebSocket {
+  return (
+    typeof input === "object" &&
+    input !== null &&
+    typeof (input as { send?: unknown }).send === "function" &&
+    typeof (input as { on?: unknown }).on === "function" &&
+    typeof (input as { close?: unknown }).close === "function"
+  );
+}
+
+function cookieValue(cookieHeader: string | undefined, name: string): string | undefined {
+  if (!cookieHeader) return undefined;
+
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}

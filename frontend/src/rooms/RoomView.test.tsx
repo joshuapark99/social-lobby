@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { RoomView } from "./RoomView";
 import type { ApiClient } from "../shared/apiClient";
-import type { RealtimeClient } from "../realtime/realtimeClient";
+import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
 
 function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
@@ -34,9 +34,19 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   };
 }
 
+function realtimeClient(state: Partial<RealtimeState> = {}): RealtimeClient {
+  return {
+    status: state.status ?? "idle",
+    snapshot: state.snapshot ?? null,
+    error: state.error ?? null,
+    connect: vi.fn(() => () => undefined),
+    subscribe: vi.fn(() => () => undefined)
+  };
+}
+
 describe("RoomView", () => {
   it("renders loading then room metadata", async () => {
-    render(<RoomView apiClient={apiClient()} realtimeClient={{ status: "idle" } satisfies RealtimeClient} roomSlug="main-lobby" />);
+    render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
 
     expect(screen.getByText("Loading room...")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
@@ -55,11 +65,48 @@ describe("RoomView", () => {
             throw new Error("Unable to load room.");
           })
         })}
-        realtimeClient={{ status: "idle" } satisfies RealtimeClient}
+        realtimeClient={realtimeClient()}
         roomSlug="main-lobby"
       />
     );
 
     await waitFor(() => expect(screen.getByText("Unable to load room.")).toBeInTheDocument());
+  });
+
+  it("renders active occupant count from realtime snapshot state", async () => {
+    render(
+      <RoomView
+        apiClient={apiClient()}
+        realtimeClient={realtimeClient({
+          status: "connected",
+          snapshot: {
+            room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+            self: {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com",
+              position: { x: 320, y: 420 }
+            },
+            occupants: [
+              {
+                connectionId: "conn-1",
+                userId: "user-1",
+                email: "person@example.com",
+                position: { x: 320, y: 420 }
+              },
+              {
+                connectionId: "conn-2",
+                userId: "user-2",
+                email: "other@example.com",
+                position: { x: 320, y: 420 }
+              }
+            ]
+          }
+        })}
+        roomSlug="main-lobby"
+      />
+    );
+
+    expect(await screen.findByText("Active occupants: 2")).toBeInTheDocument();
   });
 });

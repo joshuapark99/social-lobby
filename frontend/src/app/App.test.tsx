@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import type { SessionState } from "../auth/session";
+import type { RealtimeClient } from "../realtime/realtimeClient";
+
+function realtimeClient(): RealtimeClient {
+  return {
+    status: "idle",
+    snapshot: null,
+    error: null,
+    connect: vi.fn(() => () => undefined),
+    subscribe: vi.fn(() => () => undefined)
+  };
+}
 
 function renderApp(pathname: string, session: SessionState = { status: "anonymous" }) {
   const apiClient = {
@@ -58,7 +69,7 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
       apiClient={apiClient}
       bootstrapSession={() => Promise.resolve(session)}
       initialPathname={pathname}
-      realtimeClient={{ status: "idle" }}
+      realtimeClient={realtimeClient()}
     />,
   );
 }
@@ -90,7 +101,7 @@ describe("App", () => {
         apiClient={apiClient}
         bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
         initialPathname="/invite/friend-code"
-        realtimeClient={{ status: "idle" }}
+        realtimeClient={realtimeClient()}
       />,
     );
 
