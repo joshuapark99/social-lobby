@@ -28,7 +28,7 @@ OIDC_TOKEN_URL=https://oauth2.googleapis.com/token
 OIDC_USERINFO_URL=https://openidconnect.googleapis.com/v1/userinfo
 OIDC_CLIENT_ID=replace-with-client-id
 OIDC_CLIENT_SECRET=replace-with-client-secret
-OIDC_REDIRECT_URL=http://localhost:8081/auth/callback
+OIDC_REDIRECT_URL=http://localhost:5173/api/auth/callback
 ```
 
 Use `SESSION_COOKIE_SECURE=true` when serving over HTTPS. Do not store provider

@@ -1,5 +1,5 @@
 export type AppRoute =
-  | { name: "login" }
+  | { name: "welcome" }
   | { name: "invite"; code: string }
   | { name: "lobby" }
   | { name: "room"; roomId: string }
@@ -9,11 +9,11 @@ export function parseRoute(pathname: string): AppRoute {
   const segments = pathname.split("/").filter(Boolean);
 
   if (segments.length === 0) {
-    return { name: "lobby" };
+    return { name: "welcome" };
   }
 
-  if (segments.length === 1 && segments[0] === "login") {
-    return { name: "login" };
+  if (segments.length === 1 && segments[0] === "welcome") {
+    return { name: "welcome" };
   }
 
   if (segments.length === 1 && segments[0] === "lobby") {

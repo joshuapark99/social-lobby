@@ -7,5 +7,21 @@ export type SessionState =
 export type BootstrapSession = () => Promise<SessionState>;
 
 export async function bootstrapSession(): Promise<SessionState> {
-  return { status: "anonymous" };
+  const response = await fetch("/api/auth/session", {
+    credentials: "include"
+  });
+
+  if (response.ok) {
+    const body = (await response.json()) as { email?: string };
+    return {
+      status: "authenticated",
+      user: { displayName: body.email ?? "Signed-in user" }
+    };
+  }
+
+  if (response.status === 401) {
+    return { status: "anonymous" };
+  }
+
+  throw new Error("Unable to check session.");
 }

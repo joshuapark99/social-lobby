@@ -16,4 +16,5 @@ frontend/vite.config.js
 .DS_Store
 .codex
 
+CLAUDE.md
 AGENTS.md
