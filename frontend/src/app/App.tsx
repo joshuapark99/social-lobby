@@ -100,7 +100,7 @@ function RouteView({
     case "lobby":
       return <LobbyView apiClient={apiClient} />;
     case "room":
-      return <RoomView realtimeClient={realtimeClient} />;
+      return <RoomView apiClient={apiClient} realtimeClient={realtimeClient} roomSlug={route.roomId} />;
     case "not-found":
       return <p>This route does not exist yet.</p>;
   }
