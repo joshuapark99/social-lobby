@@ -5,11 +5,14 @@ import { createAuthService, disabledAuthService } from "./auth/service.js";
 import { PostgresAuthStore } from "./auth/postgresStore.js";
 import { createInviteService, disabledInviteService } from "./invites/service.js";
 import { PostgresInviteStore } from "./invites/postgresStore.js";
+import { createRoomService, disabledRoomService } from "./rooms/service.js";
+import { PostgresRoomStore } from "./rooms/postgresStore.js";
 import { buildServer } from "./server/server.js";
 
 const config = loadConfig();
 let authService = disabledAuthService();
 let inviteService = disabledInviteService();
+let roomService = disabledRoomService();
 let pool: Pool | undefined;
 
 if (config.databaseUrl) {
@@ -22,9 +25,12 @@ if (config.databaseUrl) {
   inviteService = createInviteService({
     store: new PostgresInviteStore(pool)
   });
+  roomService = createRoomService({
+    store: new PostgresRoomStore(pool)
+  });
 }
 
-const server = buildServer({ config, authService, inviteService });
+const server = buildServer({ config, authService, inviteService, roomService });
 const { host, port } = parseHttpAddr(config.httpAddr);
 
 const shutdown = async () => {
