@@ -8,6 +8,50 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
   const apiClient = {
     baseUrl: "/api",
     redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+    listRooms: vi.fn(async () => ({
+      community: { slug: "default-community", name: "Default Community" },
+      rooms: [
+        {
+          slug: "main-lobby",
+          name: "Main Lobby",
+          kind: "permanent",
+          isDefault: true,
+          layoutVersion: 1,
+          layout: {
+            theme: "cozy-lobby",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "lobby-furniture-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: [{ label: "Rooftop", targetRoom: "rooftop" }],
+          },
+        },
+      ],
+    })),
+    getRoom: vi.fn(async () => ({
+      community: { slug: "default-community", name: "Default Community" },
+      room: {
+        slug: "main-hall",
+        name: "Main Hall",
+        kind: "permanent",
+        isDefault: false,
+        layoutVersion: 1,
+        layout: {
+          theme: "cozy-hall",
+          backgroundAsset: "rooms/main-hall.png",
+          avatarStyleSet: "soft-rounded",
+          objectPack: "hall-furniture-v1",
+          width: 1800,
+          height: 1200,
+          spawnPoints: [{ x: 240, y: 360 }],
+          collision: [],
+          teleports: [],
+        },
+      },
+    })),
   };
   return render(
     <App
@@ -38,6 +82,8 @@ describe("App", () => {
     const apiClient = {
       baseUrl: "/api",
       redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+      listRooms: vi.fn(),
+      getRoom: vi.fn(),
     };
     render(
       <App
@@ -58,7 +104,8 @@ describe("App", () => {
     renderApp("/lobby");
 
     expect(await screen.findByRole("heading", { name: "Lobby" })).toBeInTheDocument();
-    expect(screen.getByText("Room list placeholder")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Default Community" })).toBeInTheDocument();
+    expect(screen.getByText("Main Lobby")).toBeInTheDocument();
   });
 
   it("renders the room route with canvas and chat regions", async () => {
@@ -67,6 +114,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Room: main-hall" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Room canvas" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Room chat" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Main Hall" })).toBeInTheDocument();
     expect(screen.getByText("Signed in as June")).toBeInTheDocument();
   });
 
