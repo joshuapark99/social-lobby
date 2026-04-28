@@ -27,10 +27,11 @@ export function App({
   apiClient = createApiClient(),
   bootstrapSession = defaultBootstrapSession,
   initialPathname = window.location.pathname,
-  realtimeClient = createRealtimeClient(),
+  realtimeClient,
 }: AppProps) {
   const route = useMemo(() => parseRoute(initialPathname), [initialPathname]);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
+  const [resolvedRealtimeClient] = useState(() => realtimeClient ?? createRealtimeClient({ baseUrl: apiClient.baseUrl }));
 
   useEffect(() => {
     let active = true;
@@ -62,7 +63,7 @@ export function App({
         <SessionBadge session={session} />
       </header>
       <section className="content-panel">
-        <RouteView apiClient={apiClient} realtimeClient={realtimeClient} route={route} />
+        <RouteView apiClient={apiClient} realtimeClient={resolvedRealtimeClient} route={route} />
       </section>
     </main>
   );
