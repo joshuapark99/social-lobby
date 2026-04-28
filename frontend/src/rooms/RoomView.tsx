@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RealtimeClient } from "../realtime/realtimeClient";
+import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
 import type { ApiClient } from "../shared/apiClient";
 import type { RoomDetailResponse } from "./api";
 
@@ -14,6 +14,11 @@ export function RoomView({
 }) {
   const [room, setRoom] = useState<RoomDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [realtime, setRealtime] = useState<RealtimeState>(() => ({
+    status: realtimeClient.status,
+    snapshot: realtimeClient.snapshot,
+    error: realtimeClient.error
+  }));
 
   useEffect(() => {
     let active = true;
@@ -35,6 +40,9 @@ export function RoomView({
     };
   }, [apiClient, roomSlug]);
 
+  useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
+  useEffect(() => realtimeClient.connect(roomSlug), [realtimeClient, roomSlug]);
+
   return (
     <div className="room-layout">
       <section aria-label="Room canvas" className="room-surface">
@@ -49,9 +57,11 @@ export function RoomView({
             <p>{`Spawn points: ${room.room.layout.spawnPoints.length}`}</p>
             <p>{`Collision rectangles: ${room.room.layout.collision.length}`}</p>
             <p>{`Teleports: ${room.room.layout.teleports.map((teleport) => teleport.label).join(", ") || "None"}`}</p>
+            <p>{`Active occupants: ${realtime.snapshot?.occupants.length ?? 0}`}</p>
           </>
         ) : null}
-        <p className="muted">Realtime: {realtimeClient.status}</p>
+        <p className="muted">Realtime: {realtime.status}</p>
+        {realtime.error ? <p>{realtime.error}</p> : null}
       </section>
       <section aria-label="Room chat" className="chat-panel">
         <h2>Chat</h2>
