@@ -93,7 +93,7 @@ describe("createRealtimeClient", () => {
 
     expect(client.status).toBe("connected");
     expect(client.snapshot?.occupants).toHaveLength(1);
-    expect(states.at(-1)?.snapshot?.room.slug).toBe("main-lobby");
+    expect(states[states.length - 1]?.snapshot?.room.slug).toBe("main-lobby");
 
     disconnect();
     expect(socket?.closed).toBe(true);

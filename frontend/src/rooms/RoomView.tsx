@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
 import type { ApiClient } from "../shared/apiClient";
+import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
+import { deriveRemoteOccupants } from "./pixiRoomCanvasState";
+import { PixiRoomCanvas } from "./PixiRoomCanvas";
 import type { RoomDetailResponse } from "./api";
 
 export function RoomView({
@@ -19,6 +22,10 @@ export function RoomView({
     snapshot: realtimeClient.snapshot,
     error: realtimeClient.error
   }));
+  const [lastPointerIntent, setLastPointerIntent] = useState<NormalizedRoomPoint | null>(null);
+
+  const localOccupant = realtime.snapshot?.self ?? null;
+  const remoteOccupants = realtime.snapshot ? deriveRemoteOccupants(realtime.snapshot) : [];
 
   useEffect(() => {
     let active = true;
@@ -58,6 +65,12 @@ export function RoomView({
             <p>{`Collision rectangles: ${room.room.layout.collision.length}`}</p>
             <p>{`Teleports: ${room.room.layout.teleports.map((teleport) => teleport.label).join(", ") || "None"}`}</p>
             <p>{`Active occupants: ${realtime.snapshot?.occupants.length ?? 0}`}</p>
+            <PixiRoomCanvas
+              layout={room.room.layout}
+              localOccupant={localOccupant}
+              remoteOccupants={remoteOccupants}
+              onPointerIntent={(point) => setLastPointerIntent(point)}
+            />
           </>
         ) : null}
         <p className="muted">Realtime: {realtime.status}</p>

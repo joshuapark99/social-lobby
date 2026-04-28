@@ -32,6 +32,7 @@ export function App({
   const route = useMemo(() => parseRoute(initialPathname), [initialPathname]);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
   const [resolvedRealtimeClient] = useState(() => realtimeClient ?? createRealtimeClient({ baseUrl: apiClient.baseUrl }));
+  const resolvedRoute = useMemo(() => routeForSession(route, session), [route, session]);
 
   useEffect(() => {
     let active = true;
@@ -58,12 +59,12 @@ export function App({
       <header className="top-bar">
         <div>
           <p className="eyebrow">Social Lobby</p>
-          <h1>{routeTitle(route)}</h1>
+          <h1>{routeTitle(resolvedRoute)}</h1>
         </div>
         <SessionBadge session={session} />
       </header>
       <section className="content-panel">
-        <RouteView apiClient={apiClient} realtimeClient={resolvedRealtimeClient} route={route} />
+        <RouteView apiClient={apiClient} realtimeClient={resolvedRealtimeClient} route={resolvedRoute} />
       </section>
     </main>
   );
@@ -71,8 +72,8 @@ export function App({
 
 function routeTitle(route: AppRoute) {
   switch (route.name) {
-    case "login":
-      return "Sign in";
+    case "welcome":
+      return "Welcome";
     case "invite":
       return "Redeem invite";
     case "lobby":
@@ -82,6 +83,14 @@ function routeTitle(route: AppRoute) {
     case "not-found":
       return "Not found";
   }
+}
+
+function routeForSession(route: AppRoute, session: SessionState): AppRoute {
+  if ((session.status === "loading" || session.status === "anonymous") && (route.name === "lobby" || route.name === "room")) {
+    return { name: "welcome" };
+  }
+
+  return route;
 }
 
 function RouteView({
@@ -94,7 +103,7 @@ function RouteView({
   route: AppRoute;
 }) {
   switch (route.name) {
-    case "login":
+    case "welcome":
       return <LoginView />;
     case "invite":
       return <InviteGate apiClient={apiClient} initialCode={route.code} />;

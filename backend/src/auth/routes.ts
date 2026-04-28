@@ -13,7 +13,7 @@ import {
 import type { AuthService } from "./service.js";
 
 export function registerAuthRoutes(server: FastifyInstance, options: { config: Config; authService: AuthService }): void {
-  server.get("/auth/login", async (_request, reply) => {
+  server.get("/api/auth/login", async (_request, reply) => {
     try {
       const { redirectUrl, state } = await options.authService.loginUrl();
       setOidcStateCookie(reply, state, options.config.sessionCookieSecure);
@@ -23,7 +23,7 @@ export function registerAuthRoutes(server: FastifyInstance, options: { config: C
     }
   });
 
-  server.get<{ Querystring: { code?: string; state?: string } }>("/auth/callback", async (request, reply) => {
+  server.get<{ Querystring: { code?: string; state?: string } }>("/api/auth/callback", async (request, reply) => {
     const stateCookie = request.cookies[oidcStateCookieName];
     if (!stateCookie || stateCookie !== request.query.state) {
       return reply.status(401).send("invalid auth state");
@@ -33,13 +33,13 @@ export function registerAuthRoutes(server: FastifyInstance, options: { config: C
       const result = await options.authService.completeLogin(request.query.code ?? "", request.query.state ?? "");
       setSessionCookie(reply, result.sessionToken, options.config.sessionCookieSecure);
       setCsrfCookie(reply, result.csrfToken, options.config.sessionCookieSecure);
-      return reply.status(200).send({ email: result.identity.email });
+      return reply.redirect(postLoginRedirectUrl(options.config));
     } catch {
       return reply.status(401).send("invalid identity");
     }
   });
 
-  server.get("/auth/session", async (request, reply) => {
+  server.get("/api/auth/session", async (request, reply) => {
     const sessionToken = request.cookies[sessionCookieName];
     if (!sessionToken) return reply.status(401).send("session required");
     const identity = await options.authService.session(sessionToken);
@@ -47,7 +47,7 @@ export function registerAuthRoutes(server: FastifyInstance, options: { config: C
     return reply.status(200).send({ email: identity.email });
   });
 
-  server.post("/auth/logout", async (request, reply) => {
+  server.post("/api/auth/logout", async (request, reply) => {
     if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
     const sessionToken = request.cookies[sessionCookieName];
     if (sessionToken) await options.authService.logout(sessionToken);
@@ -55,4 +55,18 @@ export function registerAuthRoutes(server: FastifyInstance, options: { config: C
     clearCsrfCookie(reply, options.config.sessionCookieSecure);
     return reply.status(204).send();
   });
+}
+
+function postLoginRedirectUrl(config: Config): string {
+  const callbackUrl = config.oidc.redirectUrl;
+  if (callbackUrl === "") {
+    return "/lobby";
+  }
+
+  try {
+    const url = new URL(callbackUrl);
+    return new URL("/lobby", url.origin).toString();
+  } catch {
+    return "/lobby";
+  }
 }

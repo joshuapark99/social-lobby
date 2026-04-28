@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",
+    "pixi.js": "^8.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.0.0",

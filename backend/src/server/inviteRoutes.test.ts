@@ -40,7 +40,7 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/admin/invites",
+      url: "api/admin/invites",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" },
       payload: { targetEmail: "Friend@Example.com", maxRedemptions: 1 }
@@ -68,7 +68,7 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/invites/redeem",
+      url: "api/invites/redeem",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" },
       payload: { code: "invite-code" }
@@ -89,7 +89,7 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/admin/invites/invite-1/revoke",
+      url: "api/admin/invites/invite-1/revoke",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" }
     });
@@ -105,14 +105,14 @@ describe("invite routes", () => {
 
     const noSession = await server.inject({
       method: "POST",
-      url: "/invites/redeem",
+      url: "api/invites/redeem",
       cookies: { sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" },
       payload: { code: "invite-code" }
     });
     const noCsrf = await server.inject({
       method: "POST",
-      url: "/invites/redeem",
+      url: "api/invites/redeem",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       payload: { code: "invite-code" }
     });
@@ -132,7 +132,7 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "/invites/redeem",
+      url: "api/invites/redeem",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" },
       payload: { code: "invite-code" }

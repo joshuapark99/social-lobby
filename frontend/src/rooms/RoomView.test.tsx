@@ -109,4 +109,17 @@ describe("RoomView", () => {
 
     expect(await screen.findByText("Active occupants: 2")).toBeInTheDocument();
   });
+
+  it("renders the Pixi room canvas once room metadata loads", async () => {
+    render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
+
+    expect(await screen.findByLabelText("Pixi room canvas")).toBeInTheDocument();
+  });
+
+  it("renders room layout without avatars when realtime is idle", async () => {
+    render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient({ status: "idle", snapshot: null })} roomSlug="main-lobby" />);
+
+    expect(await screen.findByText("Active occupants: 0")).toBeInTheDocument();
+    expect(screen.getByLabelText("Pixi room canvas")).toBeInTheDocument();
+  });
 });

@@ -14,7 +14,7 @@ export function registerInviteRoutes(
       maxRedemptions?: number | null;
       expiresAt?: string | null;
     };
-  }>("/admin/invites", async (request, reply) => {
+  }>("/api/admin/invites", async (request, reply) => {
     if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
     const identity = await requireIdentity(request, reply, options.authService);
     if (!identity) return reply;
@@ -32,7 +32,7 @@ export function registerInviteRoutes(
     }
   });
 
-  server.post<{ Params: { inviteId: string } }>("/admin/invites/:inviteId/revoke", async (request, reply) => {
+  server.post<{ Params: { inviteId: string } }>("/api/admin/invites/:inviteId/revoke", async (request, reply) => {
     if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
     const identity = await requireIdentity(request, reply, options.authService);
     if (!identity) return reply;
@@ -44,7 +44,7 @@ export function registerInviteRoutes(
     }
   });
 
-  server.post<{ Body: { code?: string } }>("/invites/redeem", async (request, reply) => {
+  server.post<{ Body: { code?: string } }>("/api/invites/redeem", async (request, reply) => {
     if (!csrfMatches(request)) return reply.status(403).send("csrf token mismatch");
     const identity = await requireIdentity(request, reply, options.authService);
     if (!identity) return reply;
