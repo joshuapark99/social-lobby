@@ -26,9 +26,15 @@ export type MovementRequest = {
   source: "pointer" | "keyboard";
 };
 
+export type TeleportRequest = {
+  roomSlug: string;
+  targetRoom: string;
+};
+
 export interface RealtimeClient extends RealtimeState {
   connect(roomSlug: string): () => void;
   requestMovement(input: MovementRequest): void;
+  requestTeleport(input: TeleportRequest): void;
   sendChatMessage(input: { roomSlug: string; body: string }): void;
   subscribe(listener: (state: RealtimeState) => void): () => void;
 }
@@ -52,6 +58,7 @@ export function createRealtimeClient(options: {
     error: null,
     connect,
     requestMovement,
+    requestTeleport,
     sendChatMessage,
     subscribe
   };
@@ -200,6 +207,16 @@ export function createRealtimeClient(options: {
       JSON.stringify({
         version: 1,
         type: "move.request",
+        payload: input
+      })
+    );
+  }
+
+  function requestTeleport(input: TeleportRequest): void {
+    activeSocket?.send(
+      JSON.stringify({
+        version: 1,
+        type: "teleport.request",
         payload: input
       })
     );

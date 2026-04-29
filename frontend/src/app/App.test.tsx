@@ -13,6 +13,7 @@ function realtimeClient(): RealtimeClient {
     error: null,
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
+    requestTeleport: vi.fn(),
     sendChatMessage: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };

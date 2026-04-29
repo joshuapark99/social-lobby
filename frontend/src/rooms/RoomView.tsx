@@ -18,6 +18,7 @@ export function RoomView({
   realtimeClient: RealtimeClient;
   roomSlug: string;
 }) {
+  const [activeRoomSlug, setActiveRoomSlug] = useState(roomSlug);
   const [room, setRoom] = useState<RoomDetailResponse | null>(null);
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -42,10 +43,23 @@ export function RoomView({
       : [];
 
   useEffect(() => {
+    setActiveRoomSlug(roomSlug);
+  }, [roomSlug]);
+
+  useEffect(() => {
+    if (!realtime.snapshot?.room.slug || realtime.snapshot.room.slug === activeRoomSlug) return;
+
+    setActiveRoomSlug(realtime.snapshot.room.slug);
+    window.history.pushState({}, "", `/rooms/${encodeURIComponent(realtime.snapshot.room.slug)}`);
+  }, [activeRoomSlug, realtime.snapshot?.room.slug]);
+
+  useEffect(() => {
     let active = true;
+    setRoom(null);
+    setMessages([]);
 
     apiClient
-      .getRoom(roomSlug)
+      .getRoom(activeRoomSlug)
       .then((response) => {
         if (!active) return;
         setRoom(response);
@@ -57,7 +71,7 @@ export function RoomView({
       });
 
     apiClient
-      .listRoomMessages(roomSlug)
+      .listRoomMessages(activeRoomSlug)
       .then((response) => {
         if (!active) return;
         setMessages((current) => mergeMessages(current, response.messages));
@@ -69,10 +83,10 @@ export function RoomView({
     return () => {
       active = false;
     };
-  }, [apiClient, roomSlug]);
+  }, [activeRoomSlug, apiClient]);
 
   useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
-  useEffect(() => realtimeClient.connect(roomSlug), [realtimeClient, roomSlug]);
+  useEffect(() => realtimeClient.connect(activeRoomSlug), [activeRoomSlug, realtimeClient]);
   useEffect(() => {
     if (realtime.messages.length === 0) return;
 
@@ -114,13 +128,13 @@ export function RoomView({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [localOccupant, realtimeClient, room, roomSlug]);
+  }, [activeRoomSlug, localOccupant, realtimeClient, room]);
 
   function handlePointerIntent(point: NormalizedRoomPoint) {
     if (!room) return;
 
     realtimeClient.requestMovement({
-      roomSlug,
+      roomSlug: activeRoomSlug,
       destination: {
         x: Math.round(point.x * room.room.layout.width),
         y: Math.round(point.y * room.room.layout.height)
@@ -129,12 +143,19 @@ export function RoomView({
     });
   }
 
+  function handleTeleport(targetRoom: string) {
+    realtimeClient.requestTeleport({
+      roomSlug: activeRoomSlug,
+      targetRoom
+    });
+  }
+
   function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = chatDraft.trim();
     if (!body) return;
 
-    realtimeClient.sendChatMessage({ roomSlug, body });
+    realtimeClient.sendChatMessage({ roomSlug: activeRoomSlug, body });
     setChatDraft("");
   }
 
@@ -153,6 +174,11 @@ export function RoomView({
             <p>{`Collision rectangles: ${room.room.layout.collision.length}`}</p>
             <p>{`Teleports: ${room.room.layout.teleports.map((teleport) => teleport.label).join(", ") || "None"}`}</p>
             <p>{`Active occupants: ${realtime.snapshot?.occupants.length ?? 0}`}</p>
+            {room.room.layout.teleports.map((teleport) => (
+              <button key={teleport.targetRoom} onClick={() => handleTeleport(teleport.targetRoom)} type="button">
+                {`Teleport to ${teleport.label}`}
+              </button>
+            ))}
             <PixiRoomCanvas
               layout={room.room.layout}
               localOccupant={localOccupant}

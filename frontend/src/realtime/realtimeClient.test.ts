@@ -193,6 +193,91 @@ describe("createRealtimeClient", () => {
     ]);
   });
 
+  it("sends teleport.request and replaces the active room from a new room.snapshot", () => {
+    let socket: FakeWebSocket | undefined;
+    const client = createRealtimeClient({
+      baseUrl: "/api",
+      webSocketFactory: (url) => {
+        socket = new FakeWebSocket(url);
+        return socket as never;
+      }
+    });
+
+    client.connect("main-lobby");
+    socket?.emit("open", {});
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "room.snapshot",
+        occurredAt: "2026-04-28T12:00:00.000Z",
+        payload: {
+          room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+          self: {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com",
+            position: { x: 320, y: 420 }
+          },
+          occupants: [
+            {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com",
+              position: { x: 320, y: 420 }
+            }
+          ]
+        }
+      })
+    });
+
+    (client as any).requestTeleport({
+      roomSlug: "main-lobby",
+      targetRoom: "rooftop"
+    });
+
+    expect(socket?.sent).toContain(
+      JSON.stringify({
+        version: 1,
+        type: "teleport.request",
+        payload: {
+          roomSlug: "main-lobby",
+          targetRoom: "rooftop"
+        }
+      })
+    );
+
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "room.snapshot",
+        occurredAt: "2026-04-28T12:00:01.000Z",
+        payload: {
+          room: { slug: "rooftop", name: "Rooftop", layoutVersion: 1 },
+          self: {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com",
+            position: { x: 180, y: 240 }
+          },
+          occupants: [
+            {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com",
+              position: { x: 180, y: 240 }
+            }
+          ]
+        }
+      })
+    });
+
+    expect(client.snapshot?.room).toEqual({
+      slug: "rooftop",
+      name: "Rooftop",
+      layoutVersion: 1
+    });
+  });
+
   it("sends chat.send and stores chat.message events", () => {
     let socket: FakeWebSocket | undefined;
     const client = createRealtimeClient({
