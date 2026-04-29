@@ -28,6 +28,11 @@ export const chatSendPayloadSchema = z.object({
   body: z.string().trim().min(1)
 });
 
+export const teleportRequestPayloadSchema = z.object({
+  roomSlug: z.string().trim().min(1),
+  targetRoom: z.string().trim().min(1)
+});
+
 export const roomJoinEventSchema = clientEnvelopeSchema.extend({
   type: z.literal("room.join"),
   payload: roomJoinPayloadSchema
@@ -43,10 +48,16 @@ export const chatSendEventSchema = clientEnvelopeSchema.extend({
   payload: chatSendPayloadSchema
 });
 
+export const teleportRequestEventSchema = clientEnvelopeSchema.extend({
+  type: z.literal("teleport.request"),
+  payload: teleportRequestPayloadSchema
+});
+
 export type ClientEnvelope = z.infer<typeof clientEnvelopeSchema>;
 export type RoomJoinEvent = z.infer<typeof roomJoinEventSchema>;
 export type MoveRequestEvent = z.infer<typeof moveRequestEventSchema>;
 export type ChatSendEvent = z.infer<typeof chatSendEventSchema>;
+export type TeleportRequestEvent = z.infer<typeof teleportRequestEventSchema>;
 
 export type PresenceOccupant = {
   connectionId: string;
@@ -105,6 +116,10 @@ export function parseMoveRequestEvent(input: string): MoveRequestEvent {
 
 export function parseChatSendEvent(input: string): ChatSendEvent {
   return chatSendEventSchema.parse(JSON.parse(input));
+}
+
+export function parseTeleportRequestEvent(input: string): TeleportRequestEvent {
+  return teleportRequestEventSchema.parse(JSON.parse(input));
 }
 
 export function buildServerEvent<TType extends string, TPayload extends object>(

@@ -11,6 +11,7 @@ import { registerInviteRoutes } from "../invites/routes.js";
 import { registerRealtimeRoutes } from "../realtime/routes.js";
 import { disabledRoomService, type RoomService } from "../rooms/service.js";
 import { registerRoomRoutes } from "../rooms/routes.js";
+import { disabledTeleportService, type TeleportService } from "../teleport/service.js";
 import { registerHealthRoutes } from "./healthRoutes.js";
 
 export function buildServer(options: {
@@ -19,12 +20,14 @@ export function buildServer(options: {
   chatService?: ChatService;
   inviteService?: InviteService;
   roomService?: RoomService;
+  teleportService?: TeleportService;
 }): FastifyInstance {
   const server = Fastify();
   const authService = options.authService ?? defaultAuthService(options.config);
   const chatService = options.chatService ?? disabledChatService();
   const inviteService = options.inviteService ?? disabledInviteService();
   const roomService = options.roomService ?? disabledRoomService();
+  const teleportService = options.teleportService ?? disabledTeleportService();
 
   void server.register(cookie);
   void server.register(websocket);
@@ -34,7 +37,7 @@ export function buildServer(options: {
   registerInviteRoutes(server, { authService, inviteService });
   registerRoomRoutes(server, { authService, roomService, chatService });
   void server.register(async (instance) => {
-    registerRealtimeRoutes(instance, { authService, roomService, chatService });
+    registerRealtimeRoutes(instance, { authService, roomService, chatService, teleportService });
   });
 
   return server;

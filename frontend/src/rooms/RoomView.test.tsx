@@ -63,9 +63,10 @@ function realtimeClient(state: Partial<RealtimeState> = {}): RealtimeClient {
     messages: state.messages ?? [],
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
+    requestTeleport: vi.fn(),
     sendChatMessage: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
-  };
+  } as RealtimeClient & { requestTeleport: ReturnType<typeof vi.fn> };
 }
 
 describe("RoomView", () => {
@@ -226,6 +227,39 @@ describe("RoomView", () => {
       roomSlug: "main-lobby",
       destination: { x: 400, y: 420 },
       source: "keyboard"
+    });
+  });
+
+  it("renders teleport controls and sends teleport requests for the selected destination", async () => {
+    const client = realtimeClient({
+      status: "connected",
+      snapshot: {
+        room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+        self: {
+          connectionId: "conn-1",
+          userId: "user-1",
+          email: "person@example.com",
+          position: { x: 320, y: 420 }
+        },
+        occupants: [
+          {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com",
+            position: { x: 320, y: 420 }
+          }
+        ]
+      }
+    }) as RealtimeClient & { requestTeleport: ReturnType<typeof vi.fn> };
+
+    render(<RoomView apiClient={apiClient()} realtimeClient={client} roomSlug="main-lobby" />);
+
+    const button = await screen.findByRole("button", { name: "Teleport to Rooftop" });
+    fireEvent.click(button);
+
+    expect(client.requestTeleport).toHaveBeenCalledWith({
+      roomSlug: "main-lobby",
+      targetRoom: "rooftop"
     });
   });
 

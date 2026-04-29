@@ -5,6 +5,7 @@ import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
 import { ChatAccessError, type ChatService } from "../chat/service.js";
 import type { RoomService } from "../rooms/service.js";
+import { TeleportAccessError, type TeleportService } from "../teleport/service.js";
 
 function authService(userId = "user-1", email = "person@example.com"): AuthService {
   return {
@@ -49,6 +50,28 @@ function roomService(): RoomService {
               }
             }
           }
+        : roomSlug === "rooftop"
+          ? {
+              community: { slug: "default-community", name: "Default Community" },
+              room: {
+                slug: "rooftop",
+                name: "Rooftop",
+                kind: "permanent",
+                isDefault: false,
+                layoutVersion: 1,
+                layout: {
+                  theme: "sunset-rooftop",
+                  backgroundAsset: "rooms/rooftop.png",
+                  avatarStyleSet: "soft-rounded",
+                  objectPack: "rooftop-v1",
+                  width: 1800,
+                  height: 1200,
+                  spawnPoints: [{ x: 180, y: 240 }],
+                  collision: [],
+                  teleports: [{ label: "Lobby", targetRoom: "main-lobby" }]
+                }
+              }
+            }
         : null
     )
   };
@@ -69,15 +92,34 @@ function chatService(overrides: Partial<ChatService> = {}): ChatService {
   };
 }
 
+function teleportService(rooms: RoomService, overrides: Partial<TeleportService> = {}): TeleportService {
+  return {
+    teleport: vi.fn(async ({ targetRoomSlug }) => {
+      const room = await rooms.roomBySlug(targetRoomSlug);
+      if (!room) throw new Error("room not found");
+      return room;
+    }),
+    ...overrides
+  };
+}
+
 describe("realtime room routes", () => {
   let server: ReturnType<typeof buildServer>;
   let sockets: WebSocket[];
   let chat: ChatService;
+  let rooms: RoomService;
 
   beforeEach(async () => {
     sockets = [];
     chat = chatService();
-    server = buildServer({ config: loadConfig({}), authService: authService(), roomService: roomService(), chatService: chat });
+    rooms = roomService();
+    server = buildServer({
+      config: loadConfig({}),
+      authService: authService(),
+      roomService: rooms,
+      chatService: chat,
+      teleportService: teleportService(rooms)
+    });
     await server.ready();
   });
 
@@ -218,6 +260,94 @@ describe("realtime room routes", () => {
       userId: "user-1",
       position: { x: 640, y: 520 }
     });
+  });
+
+  test("teleports the caller into the requested room and sends a fresh room snapshot", async () => {
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const firstSnapshotPromise = onceMessage(socket);
+    socket.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await firstSnapshotPromise;
+
+    const teleportedSnapshotPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "teleport.request",
+      requestId: "teleport-1",
+      payload: {
+        roomSlug: "main-lobby",
+        targetRoom: "rooftop"
+      }
+    }));
+
+    const event = JSON.parse((await teleportedSnapshotPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: {
+        room?: { slug?: string; name?: string };
+        self?: { position?: { x: number; y: number } };
+        occupants?: unknown[];
+      };
+    };
+
+    expect(event.type).toBe("room.snapshot");
+    expect(event.requestId).toBe("teleport-1");
+    expect(event.payload?.room).toEqual({
+      slug: "rooftop",
+      name: "Rooftop",
+      layoutVersion: 1
+    });
+    expect(event.payload?.self?.position).toEqual({ x: 180, y: 240 });
+    expect(event.payload?.occupants).toHaveLength(1);
+  });
+
+  test("returns access_denied when teleport access validation rejects the target room", async () => {
+    const teleportService = {
+      teleport: vi.fn(async () => {
+        throw new TeleportAccessError();
+      })
+    };
+    const guardedServer = buildServer({
+      config: loadConfig({}),
+      authService: authService(),
+      roomService: rooms,
+      chatService: chatService(),
+      teleportService
+    });
+    await guardedServer.ready();
+
+    const socket = rememberSocket(await guardedServer.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const firstSnapshotPromise = onceMessage(socket);
+    socket.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await firstSnapshotPromise;
+
+    const deniedPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "teleport.request",
+      requestId: "teleport-denied",
+      payload: {
+        roomSlug: "main-lobby",
+        targetRoom: "rooftop"
+      }
+    }));
+
+    const event = JSON.parse((await deniedPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { code?: string; message?: string };
+    };
+
+    expect(event.type).toBe("error");
+    expect(event.requestId).toBe("teleport-denied");
+    expect(event.payload).toEqual({
+      code: "access_denied",
+      message: "room access denied"
+    });
+    await guardedServer.close();
   });
 
   test("returns an error event for invalid envelope versions", async () => {

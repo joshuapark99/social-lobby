@@ -6,9 +6,19 @@ import { requireIdentity } from "../auth/http.js";
 import type { AuthService, OidcIdentity } from "../auth/service.js";
 import { isChatAccessError, type ChatService } from "../chat/service.js";
 import type { RoomMetadataResponse, RoomService } from "../rooms/service.js";
+import { isTeleportAccessError, type TeleportService } from "../teleport/service.js";
 import { resolveMovementDestination } from "./movement.js";
 import { InMemoryPresenceRegistry } from "./presence.js";
-import { buildErrorEvent, buildServerEvent, parseChatSendEvent, parseClientEnvelope, parseMoveRequestEvent, parseRoomJoinEvent, type PresenceOccupant } from "./protocol.js";
+import {
+  buildErrorEvent,
+  buildServerEvent,
+  parseChatSendEvent,
+  parseClientEnvelope,
+  parseMoveRequestEvent,
+  parseRoomJoinEvent,
+  parseTeleportRequestEvent,
+  type PresenceOccupant
+} from "./protocol.js";
 
 export function registerRealtimeRoutes(
   server: FastifyInstance,
@@ -16,6 +26,7 @@ export function registerRealtimeRoutes(
     authService: AuthService;
     chatService: ChatService;
     roomService: RoomService;
+    teleportService: TeleportService;
     presenceRegistry?: InMemoryPresenceRegistry;
   }
 ): void {
@@ -45,19 +56,18 @@ export function registerRealtimeRoutes(
       let joinedConnectionId: string | null = null;
       let cleanedUp = false;
       const sessionToken = cookieValue(request.headers.cookie, sessionCookieName) ?? "";
-      const roomSlug = typeof request.headers["x-room-slug"] === "string" ? request.headers["x-room-slug"] : undefined;
-      if (!roomSlug) {
+      const initialRoomSlug = typeof request.headers["x-room-slug"] === "string" ? request.headers["x-room-slug"] : undefined;
+      if (!initialRoomSlug) {
         return;
       }
 
       const identityPromise = options.authService.session(sessionToken);
-      const roomPromise = options.roomService.roomBySlug(roomSlug);
+      let currentRoomSlug = initialRoomSlug;
 
       connection.on("message", async (message) => {
         try {
           const envelope = parseClientEnvelope(message.toString());
           const identity = await identityPromise;
-          const room = await roomPromise;
           switch (envelope.type) {
             case "room.join": {
               if (joinedConnectionId) {
@@ -66,12 +76,13 @@ export function registerRealtimeRoutes(
               }
 
               const join = parseRoomJoinEvent(message.toString());
-              if (join.payload.roomSlug !== roomSlug) {
+              if (join.payload.roomSlug !== currentRoomSlug) {
                 send(connection, buildErrorEvent("room_mismatch", "room.join roomSlug must match the websocket room", join.requestId));
                 connection.close(1008, "room mismatch");
                 return;
               }
 
+              const room = await options.roomService.roomBySlug(currentRoomSlug);
               if (!identity?.userId || !room) {
                 send(connection, buildErrorEvent("session_required", "session required", join.requestId));
                 connection.close(1008, "session required");
@@ -110,11 +121,12 @@ export function registerRealtimeRoutes(
               }
 
               const move = parseMoveRequestEvent(message.toString());
-              if (move.payload.roomSlug !== roomSlug) {
+              if (move.payload.roomSlug !== currentRoomSlug) {
                 send(connection, buildErrorEvent("room_mismatch", "move.request roomSlug must match the websocket room", move.requestId));
                 return;
               }
 
+              const room = await options.roomService.roomBySlug(currentRoomSlug);
               if (!room) {
                 send(connection, buildErrorEvent("room_not_found", "room not found", move.requestId));
                 return;
@@ -132,6 +144,80 @@ export function registerRealtimeRoutes(
               broadcast(presenceRegistry.peers(room.room.slug, joinedConnectionId), accepted);
               return;
             }
+            case "teleport.request": {
+              if (!joinedConnectionId) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before teleport", envelope.requestId));
+                return;
+              }
+
+              const teleport = parseTeleportRequestEvent(message.toString());
+              if (teleport.payload.roomSlug !== currentRoomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "teleport.request roomSlug must match the active room", teleport.requestId));
+                return;
+              }
+
+              const room = await options.roomService.roomBySlug(currentRoomSlug);
+              if (!identity?.userId || !room) {
+                send(connection, buildErrorEvent("session_required", "session required", teleport.requestId));
+                return;
+              }
+
+              const authenticatedIdentity = identity as OidcIdentity & { userId: string };
+              let targetRoom;
+              try {
+                targetRoom = await options.teleportService.teleport({
+                  currentRoom: room,
+                  targetRoomSlug: teleport.payload.targetRoom,
+                  userId: authenticatedIdentity.userId
+                });
+              } catch (error) {
+                if (isTeleportAccessError(error)) {
+                  send(connection, buildErrorEvent("access_denied", error.message, teleport.requestId));
+                  return;
+                }
+
+                if (error instanceof Error && error.message === "room not found") {
+                  send(connection, buildErrorEvent("room_not_found", error.message, teleport.requestId));
+                  return;
+                }
+
+                throw error;
+              }
+
+              const removed = presenceRegistry.leave(currentRoomSlug, joinedConnectionId);
+              if (removed) {
+                broadcast(
+                  presenceRegistry.peers(currentRoomSlug, removed.connectionId),
+                  buildServerEvent("presence.left", {
+                    connectionId: removed.connectionId,
+                    userId: removed.userId
+                  })
+                );
+              }
+
+              currentRoomSlug = targetRoom.room.slug;
+              const occupant = createOccupant(authenticatedIdentity, targetRoom, joinedConnectionId);
+              const occupants = presenceRegistry.join(currentRoomSlug, occupant, connection);
+
+              send(
+                connection,
+                buildServerEvent("room.snapshot", {
+                  room: {
+                    slug: targetRoom.room.slug,
+                    name: targetRoom.room.name,
+                    layoutVersion: targetRoom.room.layoutVersion
+                  },
+                  self: occupant,
+                  occupants
+                }, teleport.requestId)
+              );
+
+              broadcast(
+                presenceRegistry.peers(currentRoomSlug, joinedConnectionId),
+                buildServerEvent("presence.joined", { occupant })
+              );
+              return;
+            }
             case "chat.send": {
               if (!joinedConnectionId) {
                 send(connection, buildErrorEvent("join_required", "room.join must be processed before chat", envelope.requestId));
@@ -139,7 +225,7 @@ export function registerRealtimeRoutes(
               }
 
               const chat = parseChatSendEvent(message.toString());
-              if (chat.payload.roomSlug !== roomSlug) {
+              if (chat.payload.roomSlug !== currentRoomSlug) {
                 send(connection, buildErrorEvent("room_mismatch", "chat.send roomSlug must match the websocket room", chat.requestId));
                 return;
               }
@@ -152,7 +238,7 @@ export function registerRealtimeRoutes(
               let created;
               try {
                 created = await options.chatService.createMessage({
-                  roomSlug,
+                  roomSlug: currentRoomSlug,
                   userId: identity.userId,
                   body: chat.payload.body
                 });
@@ -166,7 +252,7 @@ export function registerRealtimeRoutes(
               }
               const createdEvent = buildServerEvent("chat.message", { message: created }, chat.requestId);
               send(connection, createdEvent);
-              broadcast(presenceRegistry.peers(roomSlug, joinedConnectionId), createdEvent);
+              broadcast(presenceRegistry.peers(currentRoomSlug, joinedConnectionId), createdEvent);
               return;
             }
             default: {
@@ -184,15 +270,16 @@ export function registerRealtimeRoutes(
         if (cleanedUp || !joinedConnectionId) return;
         cleanedUp = true;
         const connectionId = joinedConnectionId;
+        const roomSlug = currentRoomSlug;
 
-        void roomPromise.then((room) => {
+        void options.roomService.roomBySlug(roomSlug).then((room) => {
           if (!room) return;
 
-          const removed = presenceRegistry.leave(room.room.slug, connectionId);
+          const removed = presenceRegistry.leave(roomSlug, connectionId);
           if (!removed) return;
 
           broadcast(
-            presenceRegistry.peers(room.room.slug, removed.connectionId),
+            presenceRegistry.peers(roomSlug, removed.connectionId),
             buildServerEvent("presence.left", {
               connectionId: removed.connectionId,
               userId: removed.userId
@@ -218,10 +305,14 @@ async function requireRealtimeIdentity(
   return identity as OidcIdentity & { userId: string };
 }
 
-function createOccupant(identity: OidcIdentity & { userId: string }, room: RoomMetadataResponse): PresenceOccupant {
+function createOccupant(
+  identity: OidcIdentity & { userId: string },
+  room: RoomMetadataResponse,
+  connectionId: string = randomUUID()
+): PresenceOccupant {
   const spawn = room.room.layout.spawnPoints[0];
   return {
-    connectionId: randomUUID(),
+    connectionId,
     userId: identity.userId,
     email: identity.email,
     name: identity.name,

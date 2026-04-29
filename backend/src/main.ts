@@ -10,12 +10,15 @@ import { PostgresInviteStore } from "./invites/postgresStore.js";
 import { createRoomService, disabledRoomService } from "./rooms/service.js";
 import { PostgresRoomStore } from "./rooms/postgresStore.js";
 import { buildServer } from "./server/server.js";
+import { PostgresTeleportStore } from "./teleport/postgresStore.js";
+import { createTeleportService, disabledTeleportService } from "./teleport/service.js";
 
 const config = loadConfig();
 let authService = disabledAuthService();
 let chatService = disabledChatService();
 let inviteService = disabledInviteService();
 let roomService = disabledRoomService();
+let teleportService = disabledTeleportService();
 let pool: Pool | undefined;
 
 if (config.databaseUrl) {
@@ -34,9 +37,13 @@ if (config.databaseUrl) {
   roomService = createRoomService({
     store: new PostgresRoomStore(pool)
   });
+  teleportService = createTeleportService({
+    roomService,
+    store: new PostgresTeleportStore(pool)
+  });
 }
 
-const server = buildServer({ config, authService, chatService, inviteService, roomService });
+const server = buildServer({ config, authService, chatService, inviteService, roomService, teleportService });
 const { host, port } = parseHttpAddr(config.httpAddr);
 
 const shutdown = async () => {
