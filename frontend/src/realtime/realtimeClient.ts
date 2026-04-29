@@ -17,8 +17,15 @@ export type RealtimeState = {
   error: string | null;
 };
 
+export type MovementRequest = {
+  roomSlug: string;
+  destination: { x: number; y: number };
+  source: "pointer" | "keyboard";
+};
+
 export interface RealtimeClient extends RealtimeState {
   connect(roomSlug: string): () => void;
+  requestMovement(input: MovementRequest): void;
   subscribe(listener: (state: RealtimeState) => void): () => void;
 }
 
@@ -39,6 +46,7 @@ export function createRealtimeClient(options: {
     snapshot: null,
     error: null,
     connect,
+    requestMovement,
     subscribe
   };
 
@@ -112,6 +120,22 @@ export function createRealtimeClient(options: {
           });
           return;
         }
+        case "movement.accepted": {
+          const occupant = envelope.payload?.occupant as RealtimeOccupant | undefined;
+          if (!occupant || !client.snapshot) return;
+          updateState({
+            status: "connected",
+            snapshot: {
+              ...client.snapshot,
+              self: client.snapshot.self.connectionId === occupant.connectionId ? occupant : client.snapshot.self,
+              occupants: client.snapshot.occupants.map((candidate) =>
+                candidate.connectionId === occupant.connectionId ? occupant : candidate
+              )
+            },
+            error: null
+          });
+          return;
+        }
         case "error": {
           updateState({
             status: "error",
@@ -147,6 +171,16 @@ export function createRealtimeClient(options: {
       socket.close();
       updateState({ status: "idle", snapshot: null, error: null });
     };
+  }
+
+  function requestMovement(input: MovementRequest): void {
+    activeSocket?.send(
+      JSON.stringify({
+        version: 1,
+        type: "move.request",
+        payload: input
+      })
+    );
   }
 
   function updateState(nextState: RealtimeState) {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { RoomView } from "./RoomView";
 import type { ApiClient } from "../shared/apiClient";
@@ -40,6 +40,7 @@ function realtimeClient(state: Partial<RealtimeState> = {}): RealtimeClient {
     snapshot: state.snapshot ?? null,
     error: state.error ?? null,
     connect: vi.fn(() => () => undefined),
+    requestMovement: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };
 }
@@ -121,5 +122,87 @@ describe("RoomView", () => {
 
     expect(await screen.findByText("Active occupants: 0")).toBeInTheDocument();
     expect(screen.getByLabelText("Pixi room canvas")).toBeInTheDocument();
+  });
+
+  it("sends pointer movement requests in room coordinates", async () => {
+    const client = realtimeClient({
+      status: "connected",
+      snapshot: {
+        room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+        self: {
+          connectionId: "conn-1",
+          userId: "user-1",
+          email: "person@example.com",
+          position: { x: 320, y: 420 }
+        },
+        occupants: [
+          {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com",
+            position: { x: 320, y: 420 }
+          }
+        ]
+      }
+    });
+
+    render(<RoomView apiClient={apiClient()} realtimeClient={client} roomSlug="main-lobby" />);
+
+    const canvas = await screen.findByLabelText("Pixi room canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      value: () => ({
+        left: 0,
+        top: 0,
+        width: 400,
+        height: 200,
+        right: 400,
+        bottom: 200,
+        x: 0,
+        y: 0,
+        toJSON() {}
+      })
+    });
+
+    fireEvent.click(canvas, { clientX: 200, clientY: 100 });
+
+    expect(client.requestMovement).toHaveBeenCalledWith({
+      roomSlug: "main-lobby",
+      destination: { x: 1200, y: 800 },
+      source: "pointer"
+    });
+  });
+
+  it("sends keyboard movement requests from the local occupant position", async () => {
+    const client = realtimeClient({
+      status: "connected",
+      snapshot: {
+        room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+        self: {
+          connectionId: "conn-1",
+          userId: "user-1",
+          email: "person@example.com",
+          position: { x: 320, y: 420 }
+        },
+        occupants: [
+          {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com",
+            position: { x: 320, y: 420 }
+          }
+        ]
+      }
+    });
+
+    render(<RoomView apiClient={apiClient()} realtimeClient={client} roomSlug="main-lobby" />);
+    await screen.findByLabelText("Pixi room canvas");
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+
+    expect(client.requestMovement).toHaveBeenCalledWith({
+      roomSlug: "main-lobby",
+      destination: { x: 400, y: 420 },
+      source: "keyboard"
+    });
   });
 });

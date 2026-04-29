@@ -145,6 +145,63 @@ describe("realtime room routes", () => {
     expect(event.payload?.userId).toBe("user-2");
   });
 
+  test("accepts movement requests and broadcasts the accepted destination", async () => {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const firstSnapshotPromise = onceMessage(first);
+    first.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await firstSnapshotPromise;
+
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token-2" }
+    }));
+    const secondSnapshotPromise = onceMessage(second);
+    const joinedPromise = onceMessage(first);
+    second.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await secondSnapshotPromise;
+    await joinedPromise;
+
+    const moverAcceptedPromise = onceMessage(first);
+    const peerAcceptedPromise = onceMessage(second);
+
+    first.send(
+      JSON.stringify({
+        version: 1,
+        type: "move.request",
+        requestId: "move-1",
+        payload: {
+          roomSlug: "main-lobby",
+          destination: { x: 640, y: 520 },
+          source: "pointer"
+        }
+      })
+    );
+
+    const moverEvent = JSON.parse((await moverAcceptedPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { occupant?: { userId: string; position: { x: number; y: number } } };
+    };
+    const peerEvent = JSON.parse((await peerAcceptedPromise).toString()) as {
+      type: string;
+      payload?: { occupant?: { userId: string; position: { x: number; y: number } } };
+    };
+
+    expect(moverEvent.type).toBe("movement.accepted");
+    expect(moverEvent.requestId).toBe("move-1");
+    expect(moverEvent.payload?.occupant).toMatchObject({
+      userId: "user-1",
+      position: { x: 640, y: 520 }
+    });
+
+    expect(peerEvent.type).toBe("movement.accepted");
+    expect(peerEvent.payload?.occupant).toMatchObject({
+      userId: "user-1",
+      position: { x: 640, y: 520 }
+    });
+  });
+
   test("returns an error event for invalid envelope versions", async () => {
     const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }

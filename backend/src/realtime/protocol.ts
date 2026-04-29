@@ -17,13 +17,25 @@ export const roomJoinPayloadSchema = z.object({
   roomSlug: z.string().trim().min(1)
 });
 
+export const moveRequestPayloadSchema = z.object({
+  roomSlug: z.string().trim().min(1),
+  destination: positionSchema,
+  source: z.enum(["pointer", "keyboard"])
+});
+
 export const roomJoinEventSchema = clientEnvelopeSchema.extend({
   type: z.literal("room.join"),
   payload: roomJoinPayloadSchema
 });
 
+export const moveRequestEventSchema = clientEnvelopeSchema.extend({
+  type: z.literal("move.request"),
+  payload: moveRequestPayloadSchema
+});
+
 export type ClientEnvelope = z.infer<typeof clientEnvelopeSchema>;
 export type RoomJoinEvent = z.infer<typeof roomJoinEventSchema>;
+export type MoveRequestEvent = z.infer<typeof moveRequestEventSchema>;
 
 export type PresenceOccupant = {
   connectionId: string;
@@ -52,6 +64,7 @@ export type RoomSnapshotEvent = ServerEnvelope<
 
 export type PresenceJoinedEvent = ServerEnvelope<"presence.joined", { occupant: PresenceOccupant }>;
 export type PresenceLeftEvent = ServerEnvelope<"presence.left", { connectionId: string; userId: string }>;
+export type MovementAcceptedEvent = ServerEnvelope<"movement.accepted", { occupant: PresenceOccupant }>;
 export type ErrorEvent = ServerEnvelope<"error", { code: string; message: string }>;
 
 export function parseClientEnvelope(input: string): ClientEnvelope {
@@ -60,6 +73,10 @@ export function parseClientEnvelope(input: string): ClientEnvelope {
 
 export function parseRoomJoinEvent(input: string): RoomJoinEvent {
   return roomJoinEventSchema.parse(JSON.parse(input));
+}
+
+export function parseMoveRequestEvent(input: string): MoveRequestEvent {
+  return moveRequestEventSchema.parse(JSON.parse(input));
 }
 
 export function buildServerEvent<TType extends string, TPayload extends object>(
