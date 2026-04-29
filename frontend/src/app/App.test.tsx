@@ -9,9 +9,11 @@ function realtimeClient(): RealtimeClient {
   return {
     status: "idle",
     snapshot: null,
+    messages: [],
     error: null,
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
+    sendChatMessage: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };
 }
@@ -64,6 +66,7 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
         },
       },
     })),
+    listRoomMessages: vi.fn(async () => ({ messages: [] })),
   };
   return render(
     <App
@@ -96,6 +99,7 @@ describe("App", () => {
       redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
       listRooms: vi.fn(),
       getRoom: vi.fn(),
+      listRoomMessages: vi.fn(async () => ({ messages: [] }))
     };
     render(
       <App
@@ -161,6 +165,7 @@ describe("App", () => {
       redeemInvite: vi.fn(),
       listRooms: vi.fn(),
       getRoom: vi.fn(),
+      listRoomMessages: vi.fn(async () => ({ messages: [] }))
     };
     render(
       <App

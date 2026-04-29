@@ -4,6 +4,7 @@ import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
 import type { RoomService } from "../rooms/service.js";
 import { registerRoomRoutes } from "../rooms/routes.js";
+import { ChatAccessError, type ChatService, type RoomChatMessage } from "../chat/service.js";
 
 function authService(userId = "user-1", email = "person@example.com"): AuthService {
   return {
@@ -64,6 +65,33 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
           }
         : null
     ),
+    ...overrides
+  };
+}
+
+function chatService(overrides: Partial<ChatService> = {}): ChatService {
+  const messages: RoomChatMessage[] = [
+    {
+      id: "message-1",
+      roomSlug: "main-lobby",
+      userId: "user-1",
+      userName: "Person Example",
+      body: "Hello room",
+      createdAt: "2026-04-29T10:00:00.000Z"
+    },
+    {
+      id: "message-2",
+      roomSlug: "main-lobby",
+      userId: "user-2",
+      userName: "Other Person",
+      body: "Welcome back",
+      createdAt: "2026-04-29T10:05:00.000Z"
+    }
+  ];
+
+  return {
+    listRecentMessages: vi.fn(async () => messages),
+    createMessage: vi.fn(),
     ...overrides
   };
 }
@@ -131,5 +159,62 @@ describe("room routes", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: "room not found" });
+  });
+
+  test("GET /rooms/:roomSlug/messages returns recent room chat for authenticated members", async () => {
+    const chat = chatService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService(),
+      roomService: roomService(),
+      chatService: chat
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/rooms/main-lobby/messages",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      messages: [
+        expect.objectContaining({
+          id: "message-1",
+          body: "Hello room"
+        }),
+        expect.objectContaining({
+          id: "message-2",
+          body: "Welcome back"
+        })
+      ]
+    });
+    expect(chat.listRecentMessages).toHaveBeenCalledWith({
+      roomSlug: "main-lobby",
+      userId: "user-1"
+    });
+  });
+
+  test("GET /rooms/:roomSlug/messages returns 403 when the user cannot access the room chat", async () => {
+    const chat = chatService({
+      listRecentMessages: vi.fn(async () => {
+        throw new ChatAccessError();
+      })
+    });
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService(),
+      roomService: roomService(),
+      chatService: chat
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/rooms/main-lobby/messages",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "room access denied" });
   });
 });

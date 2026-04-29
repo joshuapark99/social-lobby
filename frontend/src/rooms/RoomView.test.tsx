@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RoomView } from "./RoomView";
 import type { ApiClient } from "../shared/apiClient";
 import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
+import type { RoomChatMessage } from "../rooms/api";
 
 function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
@@ -27,8 +28,28 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
           spawnPoints: [{ x: 320, y: 420 }],
           collision: [{ x: 520, y: 360, w: 220, h: 90 }],
           teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
-        }
+          }
       }
+    })),
+    listRoomMessages: vi.fn(async (): Promise<{ messages: RoomChatMessage[] }> => ({
+      messages: [
+        {
+          id: "message-1",
+          roomSlug: "main-lobby",
+          userId: "user-1",
+          userName: "Person Example",
+          body: "Hello room",
+          createdAt: "2026-04-29T10:00:00.000Z"
+        },
+        {
+          id: "message-2",
+          roomSlug: "main-lobby",
+          userId: "user-2",
+          userName: "Other Person",
+          body: "Welcome back",
+          createdAt: "2026-04-29T10:05:00.000Z"
+        }
+      ]
     })),
     ...overrides
   };
@@ -39,8 +60,10 @@ function realtimeClient(state: Partial<RealtimeState> = {}): RealtimeClient {
     status: state.status ?? "idle",
     snapshot: state.snapshot ?? null,
     error: state.error ?? null,
+    messages: state.messages ?? [],
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
+    sendChatMessage: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };
 }
@@ -204,5 +227,55 @@ describe("RoomView", () => {
       destination: { x: 400, y: 420 },
       source: "keyboard"
     });
+  });
+
+  it("renders recent room chat history after the room loads", async () => {
+    render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
+
+    expect(await screen.findByText((_, element) => element?.textContent === "Person Example: Hello room")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === "Other Person: Welcome back")).toBeInTheDocument();
+  });
+
+  it("appends realtime chat messages from current room state", async () => {
+    render(
+      <RoomView
+        apiClient={apiClient({
+          listRoomMessages: vi.fn(async () => ({ messages: [] }))
+        })}
+        realtimeClient={realtimeClient({
+          status: "connected",
+          snapshot: {
+            room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+            self: {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com",
+              position: { x: 320, y: 420 }
+            },
+            occupants: [
+              {
+                connectionId: "conn-1",
+                userId: "user-1",
+                email: "person@example.com",
+                position: { x: 320, y: 420 }
+              }
+            ]
+          },
+          messages: [
+            {
+              id: "message-3",
+              roomSlug: "main-lobby",
+              userId: "user-2",
+              userName: "Other Person",
+              body: "Realtime hello",
+              createdAt: "2026-04-29T10:10:00.000Z"
+            }
+          ]
+        })}
+        roomSlug="main-lobby"
+      />
+    );
+
+    expect(await screen.findByRole("listitem")).toHaveTextContent("Other Person: Realtime hello");
   });
 });

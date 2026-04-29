@@ -31,6 +31,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
       ]
     })),
     getRoom: vi.fn(),
+    listRoomMessages: vi.fn(async () => ({ messages: [] })),
     ...overrides
   };
 }

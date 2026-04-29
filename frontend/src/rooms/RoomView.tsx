@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
 import type { ApiClient } from "../shared/apiClient";
 import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
 import { deriveRemoteOccupants, interpolateOccupantPositions } from "./pixiRoomCanvasState";
 import { PixiRoomCanvas } from "./PixiRoomCanvas";
-import type { RoomDetailResponse } from "./api";
+import type { RoomChatMessage, RoomDetailResponse } from "./api";
 
 const keyboardStep = 80;
 const interpolationStep = 24;
@@ -19,10 +19,13 @@ export function RoomView({
   roomSlug: string;
 }) {
   const [room, setRoom] = useState<RoomDetailResponse | null>(null);
+  const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
   const [realtime, setRealtime] = useState<RealtimeState>(() => ({
     status: realtimeClient.status,
     snapshot: realtimeClient.snapshot,
+    messages: realtimeClient.messages,
     error: realtimeClient.error
   }));
   const [renderedOccupants, setRenderedOccupants] = useState(() => realtimeClient.snapshot?.occupants ?? []);
@@ -53,6 +56,16 @@ export function RoomView({
         setError(nextError instanceof Error ? nextError.message : "Unable to load room.");
       });
 
+    apiClient
+      .listRoomMessages(roomSlug)
+      .then((response) => {
+        if (!active) return;
+        setMessages((current) => mergeMessages(current, response.messages));
+      })
+      .catch(() => {
+        if (!active) return;
+      });
+
     return () => {
       active = false;
     };
@@ -60,6 +73,11 @@ export function RoomView({
 
   useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
   useEffect(() => realtimeClient.connect(roomSlug), [realtimeClient, roomSlug]);
+  useEffect(() => {
+    if (realtime.messages.length === 0) return;
+
+    setMessages((current) => mergeMessages(current, realtime.messages));
+  }, [realtime.messages]);
   useEffect(() => {
     if (!realtime.snapshot) {
       setRenderedOccupants([]);
@@ -111,6 +129,15 @@ export function RoomView({
     });
   }
 
+  function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = chatDraft.trim();
+    if (!body) return;
+
+    realtimeClient.sendChatMessage({ roomSlug, body });
+    setChatDraft("");
+  }
+
   return (
     <div className="room-layout">
       <section aria-label="Room canvas" className="room-surface">
@@ -139,10 +166,31 @@ export function RoomView({
       </section>
       <section aria-label="Room chat" className="chat-panel">
         <h2>Chat</h2>
-        <p>Room chat placeholder</p>
+        <form onSubmit={handleChatSubmit}>
+          <label>
+            Message
+            <input value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} />
+          </label>
+          <button type="submit">Send</button>
+        </form>
+        {messages.length === 0 ? <p>No messages yet.</p> : null}
+        <ul>
+          {messages.map((message) => (
+            <li key={message.id}>
+              <strong>{message.userName}</strong>
+              {`: ${message.body}`}
+            </li>
+          ))}
+        </ul>
       </section>
     </div>
   );
+}
+
+function mergeMessages(current: RoomChatMessage[], incoming: RoomChatMessage[]): RoomChatMessage[] {
+  const merged = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => merged.set(message.id, message));
+  return [...merged.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
 function keyboardDelta(key: string): { x: number; y: number } | null {

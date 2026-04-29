@@ -93,6 +93,7 @@ describe("createRealtimeClient", () => {
 
     expect(client.status).toBe("connected");
     expect(client.snapshot?.occupants).toHaveLength(1);
+    expect(client.messages).toEqual([]);
     expect(states[states.length - 1]?.snapshot?.room.slug).toBe("main-lobby");
 
     disconnect();
@@ -188,6 +189,65 @@ describe("createRealtimeClient", () => {
         userId: "user-2",
         email: "other@example.com",
         position: { x: 700, y: 460 }
+      }
+    ]);
+  });
+
+  it("sends chat.send and stores chat.message events", () => {
+    let socket: FakeWebSocket | undefined;
+    const client = createRealtimeClient({
+      baseUrl: "/api",
+      webSocketFactory: (url) => {
+        socket = new FakeWebSocket(url);
+        return socket as never;
+      }
+    });
+
+    client.connect("main-lobby");
+    socket?.emit("open", {});
+
+    client.sendChatMessage({
+      roomSlug: "main-lobby",
+      body: "Hello room"
+    });
+
+    expect(socket?.sent).toContain(
+      JSON.stringify({
+        version: 1,
+        type: "chat.send",
+        payload: {
+          roomSlug: "main-lobby",
+          body: "Hello room"
+        }
+      })
+    );
+
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "chat.message",
+        occurredAt: "2026-04-29T10:10:00.000Z",
+        payload: {
+          message: {
+            id: "message-1",
+            roomSlug: "main-lobby",
+            userId: "user-1",
+            userName: "Person Example",
+            body: "Hello room",
+            createdAt: "2026-04-29T10:10:00.000Z"
+          }
+        }
+      })
+    });
+
+    expect(client.messages).toEqual([
+      {
+        id: "message-1",
+        roomSlug: "main-lobby",
+        userId: "user-1",
+        userName: "Person Example",
+        body: "Hello room",
+        createdAt: "2026-04-29T10:10:00.000Z"
       }
     ]);
   });

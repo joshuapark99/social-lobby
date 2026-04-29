@@ -3,6 +3,7 @@ import WebSocket from "ws";
 import { buildServer } from "../server/server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
+import { ChatAccessError, type ChatService } from "../chat/service.js";
 import type { RoomService } from "../rooms/service.js";
 
 function authService(userId = "user-1", email = "person@example.com"): AuthService {
@@ -53,13 +54,30 @@ function roomService(): RoomService {
   };
 }
 
+function chatService(overrides: Partial<ChatService> = {}): ChatService {
+  return {
+    listRecentMessages: vi.fn(),
+    createMessage: vi.fn(async ({ roomSlug, userId, body }) => ({
+      id: "message-1",
+      roomSlug,
+      userId,
+      userName: userId === "user-1" ? "Person Example" : "Other Person",
+      body,
+      createdAt: "2026-04-29T10:10:00.000Z"
+    })),
+    ...overrides
+  };
+}
+
 describe("realtime room routes", () => {
   let server: ReturnType<typeof buildServer>;
   let sockets: WebSocket[];
+  let chat: ChatService;
 
   beforeEach(async () => {
     sockets = [];
-    server = buildServer({ config: loadConfig({}), authService: authService(), roomService: roomService() });
+    chat = chatService();
+    server = buildServer({ config: loadConfig({}), authService: authService(), roomService: roomService(), chatService: chat });
     await server.ready();
   });
 
@@ -214,6 +232,102 @@ describe("realtime room routes", () => {
 
     expect(event.type).toBe("error");
     expect(event.payload?.code).toBe("invalid_event");
+  });
+
+  test("persists chat.send and fans out chat.message to room occupants", async () => {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const firstSnapshotPromise = onceMessage(first);
+    first.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await firstSnapshotPromise;
+
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token-2" }
+    }));
+    const secondSnapshotPromise = onceMessage(second);
+    const joinedPromise = onceMessage(first);
+    second.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await secondSnapshotPromise;
+    await joinedPromise;
+
+    const senderMessagePromise = onceMessage(first);
+    const peerMessagePromise = onceMessage(second);
+    first.send(JSON.stringify({
+      version: 1,
+      type: "chat.send",
+      requestId: "chat-1",
+      payload: {
+        roomSlug: "main-lobby",
+        body: "Hello room"
+      }
+    }));
+
+    const senderEvent = JSON.parse((await senderMessagePromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { message?: { body: string; userId: string } };
+    };
+    const peerEvent = JSON.parse((await peerMessagePromise).toString()) as {
+      type: string;
+      payload?: { message?: { body: string; userId: string } };
+    };
+
+    expect(senderEvent.type).toBe("chat.message");
+    expect(senderEvent.requestId).toBe("chat-1");
+    expect(senderEvent.payload?.message).toMatchObject({
+      body: "Hello room",
+      userId: "user-1"
+    });
+
+    expect(peerEvent.type).toBe("chat.message");
+    expect(peerEvent.payload?.message).toMatchObject({
+      body: "Hello room",
+      userId: "user-1"
+    });
+
+    expect(chat.createMessage).toHaveBeenCalledWith({
+      roomSlug: "main-lobby",
+      userId: "user-1",
+      body: "Hello room"
+    });
+  });
+
+  test("returns access_denied when chat.send fails membership validation", async () => {
+    chat.createMessage = vi.fn(async () => {
+      throw new ChatAccessError();
+    });
+
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const snapshotPromise = onceMessage(socket);
+    socket.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await snapshotPromise;
+
+    const errorPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "chat.send",
+      requestId: "chat-denied",
+      payload: {
+        roomSlug: "main-lobby",
+        body: "Hello room"
+      }
+    }));
+
+    const event = JSON.parse((await errorPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { code?: string; message?: string };
+    };
+
+    expect(event.type).toBe("error");
+    expect(event.requestId).toBe("chat-denied");
+    expect(event.payload).toEqual({
+      code: "access_denied",
+      message: "room access denied"
+    });
   });
 
   function rememberSocket(socket: WebSocket): WebSocket {

@@ -5,6 +5,7 @@ import type { Config } from "../config/config.js";
 import { defaultAuthService } from "../auth/defaultService.js";
 import type { AuthService } from "../auth/service.js";
 import { registerAuthRoutes } from "../auth/routes.js";
+import { disabledChatService, type ChatService } from "../chat/service.js";
 import { disabledInviteService, type InviteService } from "../invites/service.js";
 import { registerInviteRoutes } from "../invites/routes.js";
 import { registerRealtimeRoutes } from "../realtime/routes.js";
@@ -15,11 +16,13 @@ import { registerHealthRoutes } from "./healthRoutes.js";
 export function buildServer(options: {
   config: Config;
   authService?: AuthService;
+  chatService?: ChatService;
   inviteService?: InviteService;
   roomService?: RoomService;
 }): FastifyInstance {
   const server = Fastify();
   const authService = options.authService ?? defaultAuthService(options.config);
+  const chatService = options.chatService ?? disabledChatService();
   const inviteService = options.inviteService ?? disabledInviteService();
   const roomService = options.roomService ?? disabledRoomService();
 
@@ -29,9 +32,9 @@ export function buildServer(options: {
   registerHealthRoutes(server);
   registerAuthRoutes(server, { config: options.config, authService });
   registerInviteRoutes(server, { authService, inviteService });
-  registerRoomRoutes(server, { authService, roomService });
+  registerRoomRoutes(server, { authService, roomService, chatService });
   void server.register(async (instance) => {
-    registerRealtimeRoutes(instance, { authService, roomService });
+    registerRealtimeRoutes(instance, { authService, roomService, chatService });
   });
 
   return server;

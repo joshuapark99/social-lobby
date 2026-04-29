@@ -23,6 +23,11 @@ export const moveRequestPayloadSchema = z.object({
   source: z.enum(["pointer", "keyboard"])
 });
 
+export const chatSendPayloadSchema = z.object({
+  roomSlug: z.string().trim().min(1),
+  body: z.string().trim().min(1)
+});
+
 export const roomJoinEventSchema = clientEnvelopeSchema.extend({
   type: z.literal("room.join"),
   payload: roomJoinPayloadSchema
@@ -33,9 +38,15 @@ export const moveRequestEventSchema = clientEnvelopeSchema.extend({
   payload: moveRequestPayloadSchema
 });
 
+export const chatSendEventSchema = clientEnvelopeSchema.extend({
+  type: z.literal("chat.send"),
+  payload: chatSendPayloadSchema
+});
+
 export type ClientEnvelope = z.infer<typeof clientEnvelopeSchema>;
 export type RoomJoinEvent = z.infer<typeof roomJoinEventSchema>;
 export type MoveRequestEvent = z.infer<typeof moveRequestEventSchema>;
+export type ChatSendEvent = z.infer<typeof chatSendEventSchema>;
 
 export type PresenceOccupant = {
   connectionId: string;
@@ -65,6 +76,19 @@ export type RoomSnapshotEvent = ServerEnvelope<
 export type PresenceJoinedEvent = ServerEnvelope<"presence.joined", { occupant: PresenceOccupant }>;
 export type PresenceLeftEvent = ServerEnvelope<"presence.left", { connectionId: string; userId: string }>;
 export type MovementAcceptedEvent = ServerEnvelope<"movement.accepted", { occupant: PresenceOccupant }>;
+export type ChatMessageEvent = ServerEnvelope<
+  "chat.message",
+  {
+    message: {
+      id: string;
+      roomSlug: string;
+      userId: string;
+      userName: string;
+      body: string;
+      createdAt: string;
+    };
+  }
+>;
 export type ErrorEvent = ServerEnvelope<"error", { code: string; message: string }>;
 
 export function parseClientEnvelope(input: string): ClientEnvelope {
@@ -77,6 +101,10 @@ export function parseRoomJoinEvent(input: string): RoomJoinEvent {
 
 export function parseMoveRequestEvent(input: string): MoveRequestEvent {
   return moveRequestEventSchema.parse(JSON.parse(input));
+}
+
+export function parseChatSendEvent(input: string): ChatSendEvent {
+  return chatSendEventSchema.parse(JSON.parse(input));
 }
 
 export function buildServerEvent<TType extends string, TPayload extends object>(

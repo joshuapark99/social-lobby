@@ -1,10 +1,11 @@
-import type { RoomDetailResponse, RoomListResponse } from "../rooms/api";
+import type { RoomChatHistoryResponse, RoomDetailResponse, RoomListResponse } from "../rooms/api";
 
 export interface ApiClient {
   readonly baseUrl: string;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
   listRooms(): Promise<RoomListResponse>;
   getRoom(roomSlug: string): Promise<RoomDetailResponse>;
+  listRoomMessages(roomSlug: string): Promise<RoomChatHistoryResponse>;
 }
 
 export function createApiClient(baseUrl = "/api"): ApiClient {
@@ -54,6 +55,18 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
 
       return (await response.json()) as RoomDetailResponse;
     },
+    async listRoomMessages(roomSlug: string) {
+      const response = await fetch(`${baseUrl}/rooms/${encodeURIComponent(roomSlug)}/messages`, {
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to load room chat." }))) as { error?: string };
+        throw new Error(body.error ?? "Unable to load room chat.");
+      }
+
+      return (await response.json()) as RoomChatHistoryResponse;
+    }
   };
 }
 
