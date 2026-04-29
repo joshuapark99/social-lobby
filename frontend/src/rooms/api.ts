@@ -34,3 +34,16 @@ export interface RoomDetailResponse {
   };
   room: RoomMetadata;
 }
+
+export interface RoomChatMessage {
+  id: string;
+  roomSlug: string;
+  userId: string;
+  userName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface RoomChatHistoryResponse {
+  messages: RoomChatMessage[];
+}

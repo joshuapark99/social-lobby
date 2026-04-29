@@ -4,15 +4,17 @@ import type WebSocket from "ws";
 import { sessionCookieName } from "../auth/cookies.js";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService, OidcIdentity } from "../auth/service.js";
+import { isChatAccessError, type ChatService } from "../chat/service.js";
 import type { RoomMetadataResponse, RoomService } from "../rooms/service.js";
 import { resolveMovementDestination } from "./movement.js";
 import { InMemoryPresenceRegistry } from "./presence.js";
-import { buildErrorEvent, buildServerEvent, parseClientEnvelope, parseMoveRequestEvent, parseRoomJoinEvent, type PresenceOccupant } from "./protocol.js";
+import { buildErrorEvent, buildServerEvent, parseChatSendEvent, parseClientEnvelope, parseMoveRequestEvent, parseRoomJoinEvent, type PresenceOccupant } from "./protocol.js";
 
 export function registerRealtimeRoutes(
   server: FastifyInstance,
   options: {
     authService: AuthService;
+    chatService: ChatService;
     roomService: RoomService;
     presenceRegistry?: InMemoryPresenceRegistry;
   }
@@ -128,6 +130,43 @@ export function registerRealtimeRoutes(
               const accepted = buildServerEvent("movement.accepted", { occupant }, move.requestId);
               send(connection, accepted);
               broadcast(presenceRegistry.peers(room.room.slug, joinedConnectionId), accepted);
+              return;
+            }
+            case "chat.send": {
+              if (!joinedConnectionId) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before chat", envelope.requestId));
+                return;
+              }
+
+              const chat = parseChatSendEvent(message.toString());
+              if (chat.payload.roomSlug !== roomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "chat.send roomSlug must match the websocket room", chat.requestId));
+                return;
+              }
+
+              if (!identity?.userId) {
+                send(connection, buildErrorEvent("session_required", "session required", chat.requestId));
+                return;
+              }
+
+              let created;
+              try {
+                created = await options.chatService.createMessage({
+                  roomSlug,
+                  userId: identity.userId,
+                  body: chat.payload.body
+                });
+              } catch (error) {
+                if (isChatAccessError(error)) {
+                  send(connection, buildErrorEvent("access_denied", error.message, chat.requestId));
+                  return;
+                }
+
+                throw error;
+              }
+              const createdEvent = buildServerEvent("chat.message", { message: created }, chat.requestId);
+              send(connection, createdEvent);
+              broadcast(presenceRegistry.peers(roomSlug, joinedConnectionId), createdEvent);
               return;
             }
             default: {
