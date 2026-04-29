@@ -31,6 +31,20 @@ export class InMemoryPresenceRegistry {
     return [...(this.rooms.get(roomSlug)?.values() ?? [])].map((entry) => entry.occupant);
   }
 
+  move(roomSlug: string, connectionId: string, position: PresenceOccupant["position"]): PresenceOccupant | null {
+    const room = this.rooms.get(roomSlug);
+    const entry = room?.get(connectionId);
+    if (!entry) return null;
+
+    entry.occupant = {
+      ...entry.occupant,
+      position
+    };
+
+    room?.set(connectionId, entry);
+    return entry.occupant;
+  }
+
   peers(roomSlug: string, excludeConnectionId: string): WebSocket[] {
     return [...(this.rooms.get(roomSlug)?.values() ?? [])]
       .filter((entry) => entry.occupant.connectionId !== excludeConnectionId)

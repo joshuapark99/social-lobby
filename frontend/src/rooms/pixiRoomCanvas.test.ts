@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { PixiRoomCanvas } from "./PixiRoomCanvas";
 import { normalizePointerPosition } from "./pixiRoomCanvasMath";
-import { deriveRemoteOccupants } from "./pixiRoomCanvasState";
+import { deriveRemoteOccupants, interpolateOccupantPositions } from "./pixiRoomCanvasState";
 import type { RoomLayout } from "./api";
 import type { RealtimeOccupant } from "../realtime/realtimeClient";
 
@@ -70,6 +70,37 @@ describe("deriveRemoteOccupants", () => {
     ).toEqual([
       { connectionId: "conn-2", userId: "user-2", email: "b@example.com", position: { x: 640, y: 420 } }
     ]);
+  });
+});
+
+describe("interpolateOccupantPositions", () => {
+  it("moves occupants toward their authoritative targets in fixed steps", () => {
+    expect(
+      interpolateOccupantPositions(
+        [
+          { connectionId: "conn-1", userId: "user-1", email: "a@example.com", position: { x: 320, y: 420 } },
+          { connectionId: "conn-2", userId: "user-2", email: "b@example.com", position: { x: 640, y: 420 } }
+        ],
+        [
+          { connectionId: "conn-1", userId: "user-1", email: "a@example.com", position: { x: 400, y: 420 } },
+          { connectionId: "conn-2", userId: "user-2", email: "b@example.com", position: { x: 640, y: 500 } }
+        ],
+        24
+      )
+    ).toEqual([
+      { connectionId: "conn-1", userId: "user-1", email: "a@example.com", position: { x: 344, y: 420 } },
+      { connectionId: "conn-2", userId: "user-2", email: "b@example.com", position: { x: 640, y: 444 } }
+    ]);
+  });
+
+  it("snaps occupants that are already within one step of the target", () => {
+    expect(
+      interpolateOccupantPositions(
+        [{ connectionId: "conn-1", userId: "user-1", email: "a@example.com", position: { x: 320, y: 420 } }],
+        [{ connectionId: "conn-1", userId: "user-1", email: "a@example.com", position: { x: 330, y: 426 } }],
+        24
+      )
+    ).toEqual([{ connectionId: "conn-1", userId: "user-1", email: "a@example.com", position: { x: 330, y: 426 } }]);
   });
 });
 

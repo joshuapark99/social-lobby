@@ -82,6 +82,17 @@ export function PixiRoomCanvas({
     };
   }, []);
 
+  useEffect(() => {
+    if (!appRef.current) return;
+
+    drawScene({
+      layout,
+      localOccupant: localOccupant ?? null,
+      remoteOccupants: remoteOccupants ?? [],
+      stage: appRef.current.stage
+    });
+  }, [layout, localOccupant, remoteOccupants]);
+
   function drawScene(input: {
     layout: RoomLayout;
     localOccupant: RealtimeOccupant | null;

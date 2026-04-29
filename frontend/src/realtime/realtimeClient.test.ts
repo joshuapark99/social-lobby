@@ -98,4 +98,97 @@ describe("createRealtimeClient", () => {
     disconnect();
     expect(socket?.closed).toBe(true);
   });
+
+  it("sends move.request and updates occupant state from movement.accepted", () => {
+    let socket: FakeWebSocket | undefined;
+    const client = createRealtimeClient({
+      baseUrl: "/api",
+      webSocketFactory: (url) => {
+        socket = new FakeWebSocket(url);
+        return socket as never;
+      }
+    });
+
+    client.connect("main-lobby");
+    socket?.emit("open", {});
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "room.snapshot",
+        occurredAt: "2026-04-28T12:00:00.000Z",
+        payload: {
+          room: { slug: "main-lobby", name: "Main Lobby", layoutVersion: 1 },
+          self: {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com",
+            position: { x: 320, y: 420 }
+          },
+          occupants: [
+            {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com",
+              position: { x: 320, y: 420 }
+            },
+            {
+              connectionId: "conn-2",
+              userId: "user-2",
+              email: "other@example.com",
+              position: { x: 640, y: 420 }
+            }
+          ]
+        }
+      })
+    });
+
+    client.requestMovement({
+      roomSlug: "main-lobby",
+      destination: { x: 640, y: 520 },
+      source: "pointer"
+    });
+
+    expect(socket?.sent).toContain(
+      JSON.stringify({
+        version: 1,
+        type: "move.request",
+        payload: {
+          roomSlug: "main-lobby",
+          destination: { x: 640, y: 520 },
+          source: "pointer"
+        }
+      })
+    );
+
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "movement.accepted",
+        occurredAt: "2026-04-28T12:00:01.000Z",
+        payload: {
+          occupant: {
+            connectionId: "conn-2",
+            userId: "user-2",
+            email: "other@example.com",
+            position: { x: 700, y: 460 }
+          }
+        }
+      })
+    });
+
+    expect(client.snapshot?.occupants).toEqual([
+      {
+        connectionId: "conn-1",
+        userId: "user-1",
+        email: "person@example.com",
+        position: { x: 320, y: 420 }
+      },
+      {
+        connectionId: "conn-2",
+        userId: "user-2",
+        email: "other@example.com",
+        position: { x: 700, y: 460 }
+      }
+    ]);
+  });
 });

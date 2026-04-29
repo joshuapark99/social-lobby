@@ -5,8 +5,9 @@ import { sessionCookieName } from "../auth/cookies.js";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService, OidcIdentity } from "../auth/service.js";
 import type { RoomMetadataResponse, RoomService } from "../rooms/service.js";
+import { resolveMovementDestination } from "./movement.js";
 import { InMemoryPresenceRegistry } from "./presence.js";
-import { buildErrorEvent, buildServerEvent, parseClientEnvelope, parseRoomJoinEvent, type PresenceOccupant } from "./protocol.js";
+import { buildErrorEvent, buildServerEvent, parseClientEnvelope, parseMoveRequestEvent, parseRoomJoinEvent, type PresenceOccupant } from "./protocol.js";
 
 export function registerRealtimeRoutes(
   server: FastifyInstance,
@@ -53,54 +54,87 @@ export function registerRealtimeRoutes(
       connection.on("message", async (message) => {
         try {
           const envelope = parseClientEnvelope(message.toString());
-          if (envelope.type !== "room.join") {
-            send(connection, buildErrorEvent("unsupported_event", `unsupported realtime event type: ${envelope.type}`, envelope.requestId));
-            return;
-          }
-
-          if (joinedConnectionId) {
-            send(connection, buildErrorEvent("already_joined", "room.join has already been processed", envelope.requestId));
-            return;
-          }
-
-          const join = parseRoomJoinEvent(message.toString());
-          if (join.payload.roomSlug !== roomSlug) {
-            send(connection, buildErrorEvent("room_mismatch", "room.join roomSlug must match the websocket room", join.requestId));
-            connection.close(1008, "room mismatch");
-            return;
-          }
-
           const identity = await identityPromise;
           const room = await roomPromise;
-          if (!identity?.userId || !room) {
-            send(connection, buildErrorEvent("session_required", "session required", join.requestId));
-            connection.close(1008, "session required");
-            return;
+          switch (envelope.type) {
+            case "room.join": {
+              if (joinedConnectionId) {
+                send(connection, buildErrorEvent("already_joined", "room.join has already been processed", envelope.requestId));
+                return;
+              }
+
+              const join = parseRoomJoinEvent(message.toString());
+              if (join.payload.roomSlug !== roomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "room.join roomSlug must match the websocket room", join.requestId));
+                connection.close(1008, "room mismatch");
+                return;
+              }
+
+              if (!identity?.userId || !room) {
+                send(connection, buildErrorEvent("session_required", "session required", join.requestId));
+                connection.close(1008, "session required");
+                return;
+              }
+
+              const authenticatedIdentity = identity as OidcIdentity & { userId: string };
+              const occupant = createOccupant(authenticatedIdentity, room);
+              const connectionId = occupant.connectionId;
+              joinedConnectionId = connectionId;
+              const occupants = presenceRegistry.join(room.room.slug, occupant, connection);
+
+              send(
+                connection,
+                buildServerEvent("room.snapshot", {
+                  room: {
+                    slug: room.room.slug,
+                    name: room.room.name,
+                    layoutVersion: room.room.layoutVersion
+                  },
+                  self: occupant,
+                  occupants
+                }, join.requestId)
+              );
+
+              broadcast(
+                presenceRegistry.peers(room.room.slug, connectionId),
+                buildServerEvent("presence.joined", { occupant })
+              );
+              return;
+            }
+            case "move.request": {
+              if (!joinedConnectionId) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before movement", envelope.requestId));
+                return;
+              }
+
+              const move = parseMoveRequestEvent(message.toString());
+              if (move.payload.roomSlug !== roomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "move.request roomSlug must match the websocket room", move.requestId));
+                return;
+              }
+
+              if (!room) {
+                send(connection, buildErrorEvent("room_not_found", "room not found", move.requestId));
+                return;
+              }
+
+              const position = resolveMovementDestination(room.room.layout, move.payload.destination);
+              const occupant = presenceRegistry.move(room.room.slug, joinedConnectionId, position);
+              if (!occupant) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before movement", move.requestId));
+                return;
+              }
+
+              const accepted = buildServerEvent("movement.accepted", { occupant }, move.requestId);
+              send(connection, accepted);
+              broadcast(presenceRegistry.peers(room.room.slug, joinedConnectionId), accepted);
+              return;
+            }
+            default: {
+              send(connection, buildErrorEvent("unsupported_event", `unsupported realtime event type: ${envelope.type}`, envelope.requestId));
+              return;
+            }
           }
-
-          const authenticatedIdentity = identity as OidcIdentity & { userId: string };
-          const occupant = createOccupant(authenticatedIdentity, room);
-          const connectionId = occupant.connectionId;
-          joinedConnectionId = connectionId;
-          const occupants = presenceRegistry.join(room.room.slug, occupant, connection);
-
-          send(
-            connection,
-            buildServerEvent("room.snapshot", {
-              room: {
-                slug: room.room.slug,
-                name: room.room.name,
-                layoutVersion: room.room.layoutVersion
-              },
-              self: occupant,
-              occupants
-            }, join.requestId)
-          );
-
-          broadcast(
-            presenceRegistry.peers(room.room.slug, connectionId),
-            buildServerEvent("presence.joined", { occupant })
-          );
         } catch (error) {
           send(connection, buildErrorEvent("invalid_event", errorMessage(error)));
           connection.close(1008, "invalid event");

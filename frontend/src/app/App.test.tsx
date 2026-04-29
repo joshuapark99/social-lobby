@@ -11,6 +11,7 @@ function realtimeClient(): RealtimeClient {
     snapshot: null,
     error: null,
     connect: vi.fn(() => () => undefined),
+    requestMovement: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };
 }
