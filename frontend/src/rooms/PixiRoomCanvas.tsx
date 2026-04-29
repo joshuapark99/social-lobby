@@ -1,6 +1,6 @@
 import type { MouseEvent } from "react";
 import { useEffect, useRef } from "react";
-import { type Application, type Container, Graphics } from "pixi.js";
+import type { Application, Container, Graphics } from "pixi.js";
 import type { RealtimeOccupant } from "../realtime/realtimeClient";
 import type { RoomLayout } from "./api";
 import { normalizePointerPosition, type NormalizedRoomPoint } from "./pixiRoomCanvasMath";
@@ -18,6 +18,7 @@ export function PixiRoomCanvas({
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
+  const graphicsRef = useRef<typeof import("pixi.js").Graphics | null>(null);
   const layoutRef = useRef(layout);
   const localOccupantRef = useRef(localOccupant);
   const remoteOccupantsRef = useRef(remoteOccupants);
@@ -41,9 +42,10 @@ export function PixiRoomCanvas({
     let initialized = false;
 
     void import("pixi.js")
-      .then(({ Application }) => {
+      .then(({ Application, Graphics }) => {
         if (disposed || !hostRef.current || appRef.current) return;
 
+        graphicsRef.current = Graphics;
         const app = new Application();
         appRef.current = app;
 
@@ -63,7 +65,8 @@ export function PixiRoomCanvas({
             layout: layoutRef.current,
             localOccupant: localOccupantRef.current ?? null,
             remoteOccupants: remoteOccupantsRef.current ?? [],
-            stage: app.stage
+            stage: app.stage,
+            GraphicsCtor: Graphics
           });
         });
       })
@@ -84,12 +87,14 @@ export function PixiRoomCanvas({
 
   useEffect(() => {
     if (!appRef.current) return;
+    if (!graphicsRef.current) return;
 
     drawScene({
       layout,
       localOccupant: localOccupant ?? null,
       remoteOccupants: remoteOccupants ?? [],
-      stage: appRef.current.stage
+      stage: appRef.current.stage,
+      GraphicsCtor: graphicsRef.current
     });
   }, [layout, localOccupant, remoteOccupants]);
 
@@ -98,23 +103,24 @@ export function PixiRoomCanvas({
     localOccupant: RealtimeOccupant | null;
     remoteOccupants: RealtimeOccupant[];
     stage: Container;
+    GraphicsCtor: typeof import("pixi.js").Graphics;
   }) {
     input.stage.removeChildren();
-    input.stage.addChild(drawBackground(input.layout));
-    input.stage.addChild(drawCollisionLayer(input.layout.collision));
-    if (input.localOccupant) input.stage.addChild(drawAvatar(input.localOccupant.position, 0x1f6f68));
-    input.remoteOccupants.forEach((occupant) => input.stage.addChild(drawAvatar(occupant.position, 0x42657a)));
+    input.stage.addChild(drawBackground(input.layout, input.GraphicsCtor));
+    input.stage.addChild(drawCollisionLayer(input.layout.collision, input.GraphicsCtor));
+    if (input.localOccupant) input.stage.addChild(drawAvatar(input.localOccupant.position, 0x1f6f68, input.GraphicsCtor));
+    input.remoteOccupants.forEach((occupant) => input.stage.addChild(drawAvatar(occupant.position, 0x42657a, input.GraphicsCtor)));
   }
 
-  function drawBackground(layout: RoomLayout): Graphics {
-    const g = new Graphics();
+  function drawBackground(layout: RoomLayout, GraphicsCtor: typeof import("pixi.js").Graphics): Graphics {
+    const g = new GraphicsCtor();
     g.rect(0, 0, layout.width, layout.height);
     g.fill(0xf4efe4);
     return g;
   }
 
-  function drawCollisionLayer(collision: RoomLayout["collision"]): Graphics {
-    const g = new Graphics();
+  function drawCollisionLayer(collision: RoomLayout["collision"], GraphicsCtor: typeof import("pixi.js").Graphics): Graphics {
+    const g = new GraphicsCtor();
     collision.forEach(({ x, y, w, h }) => {
       g.rect(x, y, w, h);
       g.fill(0xd8dee3);
@@ -122,8 +128,12 @@ export function PixiRoomCanvas({
     return g;
   }
 
-  function drawAvatar(position: { x: number; y: number }, color: number): Graphics {
-    const g = new Graphics();
+  function drawAvatar(
+    position: { x: number; y: number },
+    color: number,
+    GraphicsCtor: typeof import("pixi.js").Graphics
+  ): Graphics {
+    const g = new GraphicsCtor();
     g.circle(position.x, position.y, 20);
     g.fill(color);
     return g;
