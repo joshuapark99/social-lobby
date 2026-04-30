@@ -5,7 +5,7 @@ import { sessionCookieName } from "../auth/cookies.js";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService, OidcIdentity } from "../auth/service.js";
 import { isChatAccessError, type ChatService } from "../chat/service.js";
-import type { RoomMetadataResponse, RoomService } from "../rooms/service.js";
+import { isRoomAccessError, type RoomMetadataResponse, type RoomService } from "../rooms/service.js";
 import type { EventLogger, Observability } from "../server/observability.js";
 import { isTeleportAccessError, type TeleportService } from "../teleport/service.js";
 import { resolveMovementDestination } from "./movement.js";
@@ -43,9 +43,17 @@ export function registerRealtimeRoutes(
       const identity = await requireRealtimeIdentity(request, reply, options.authService);
       if (!identity) return reply;
 
-      const room = await options.roomService.roomBySlug(request.params.roomSlug);
-      if (!room) {
-        return reply.status(404).send({ error: "room not found" });
+      try {
+        const room = await options.roomService.roomBySlug(request.params.roomSlug, identity.userId);
+        if (!room) {
+          return reply.status(404).send({ error: "room not found" });
+        }
+      } catch (error) {
+        if (isRoomAccessError(error)) {
+          return reply.status(403).send({ error: error.message });
+        }
+
+        throw error;
       }
 
       request.headers["x-room-slug"] = request.params.roomSlug;
@@ -90,10 +98,28 @@ export function registerRealtimeRoutes(
                 return;
               }
 
-              const room = await options.roomService.roomBySlug(currentRoomSlug);
-              if (!identity?.userId || !room) {
+              if (!identity?.userId) {
                 send(connection, buildErrorEvent("session_required", "session required", join.requestId));
                 connection.close(1008, "session required");
+                return;
+              }
+
+              let room;
+              try {
+                room = await options.roomService.roomBySlug(currentRoomSlug, identity.userId);
+              } catch (error) {
+                if (isRoomAccessError(error)) {
+                  send(connection, buildErrorEvent("access_denied", error.message, join.requestId));
+                  connection.close(1008, "room access denied");
+                  return;
+                }
+
+                throw error;
+              }
+
+              if (!room) {
+                send(connection, buildErrorEvent("room_not_found", "room not found", join.requestId));
+                connection.close(1008, "room not found");
                 return;
               }
 
@@ -136,13 +162,29 @@ export function registerRealtimeRoutes(
                 return;
               }
 
+              if (!identity?.userId) {
+                send(connection, buildErrorEvent("session_required", "session required", envelope.requestId));
+                return;
+              }
+
               const move = parseMoveRequestEvent(message.toString());
               if (move.payload.roomSlug !== currentRoomSlug) {
                 send(connection, buildErrorEvent("room_mismatch", "move.request roomSlug must match the websocket room", move.requestId));
                 return;
               }
 
-              const room = await options.roomService.roomBySlug(currentRoomSlug);
+              let room;
+              try {
+                room = await options.roomService.roomBySlug(currentRoomSlug, identity.userId);
+              } catch (error) {
+                if (isRoomAccessError(error)) {
+                  send(connection, buildErrorEvent("access_denied", error.message, move.requestId));
+                  return;
+                }
+
+                throw error;
+              }
+
               if (!room) {
                 send(connection, buildErrorEvent("room_not_found", "room not found", move.requestId));
                 return;
@@ -173,9 +215,25 @@ export function registerRealtimeRoutes(
                 return;
               }
 
-              const room = await options.roomService.roomBySlug(currentRoomSlug);
-              if (!identity?.userId || !room) {
+              if (!identity?.userId) {
                 send(connection, buildErrorEvent("session_required", "session required", teleport.requestId));
+                return;
+              }
+
+              let room;
+              try {
+                room = await options.roomService.roomBySlug(currentRoomSlug, identity.userId);
+              } catch (error) {
+                if (isRoomAccessError(error)) {
+                  send(connection, buildErrorEvent("access_denied", error.message, teleport.requestId));
+                  return;
+                }
+
+                throw error;
+              }
+
+              if (!room) {
+                send(connection, buildErrorEvent("room_not_found", "room not found", teleport.requestId));
                 return;
               }
 
@@ -296,7 +354,11 @@ export function registerRealtimeRoutes(
         const connectionId = joinedConnectionId;
         const roomSlug = currentRoomSlug;
 
-        void options.roomService.roomBySlug(roomSlug).then((room) => {
+        if (!identityPromise) return;
+        void identityPromise.then(async (identity) => {
+          if (!identity?.userId) return;
+
+          const room = await options.roomService.roomBySlug(roomSlug, identity.userId).catch(() => null);
           if (!room) return;
 
           const removed = presenceRegistry.leave(roomSlug, connectionId);

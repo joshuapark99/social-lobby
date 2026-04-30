@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import { isChatAccessError, type ChatService } from "../chat/service.js";
-import type { RoomService } from "./service.js";
+import { isRoomAccessError, type RoomService } from "./service.js";
 
 export function registerRoomRoutes(
   server: FastifyInstance,
@@ -13,8 +13,11 @@ export function registerRoomRoutes(
     if (!identity) return reply;
 
     try {
-      return reply.status(200).send(await options.roomService.listDefaultCommunityRooms());
+      return reply.status(200).send(await options.roomService.listDefaultCommunityRooms(identity.userId));
     } catch (error) {
+      if (isRoomAccessError(error)) {
+        return reply.status(403).send({ error: error.message });
+      }
       return reply.status(500).send({ error: errorMessage(error) });
     }
   });
@@ -24,10 +27,13 @@ export function registerRoomRoutes(
     if (!identity) return reply;
 
     try {
-      const room = await options.roomService.roomBySlug(request.params.roomSlug);
+      const room = await options.roomService.roomBySlug(request.params.roomSlug, identity.userId);
       if (!room) return reply.status(404).send({ error: "room not found" });
       return reply.status(200).send(room);
     } catch (error) {
+      if (isRoomAccessError(error)) {
+        return reply.status(403).send({ error: error.message });
+      }
       return reply.status(500).send({ error: errorMessage(error) });
     }
   });

@@ -94,8 +94,8 @@ function chatService(overrides: Partial<ChatService> = {}): ChatService {
 
 function teleportService(rooms: RoomService, overrides: Partial<TeleportService> = {}): TeleportService {
   return {
-    teleport: vi.fn(async ({ targetRoomSlug }) => {
-      const room = await rooms.roomBySlug(targetRoomSlug);
+    teleport: vi.fn(async ({ targetRoomSlug, userId }) => {
+      const room = await rooms.roomBySlug(targetRoomSlug, userId);
       if (!room) throw new Error("room not found");
       return room;
     }),

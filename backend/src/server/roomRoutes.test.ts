@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { buildServer } from "./server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
-import type { RoomService } from "../rooms/service.js";
+import { RoomAccessError, type RoomService } from "../rooms/service.js";
 import { registerRoomRoutes } from "../rooms/routes.js";
 import { ChatAccessError, type ChatService, type RoomChatMessage } from "../chat/service.js";
 
@@ -17,7 +17,7 @@ function authService(userId = "user-1", email = "person@example.com"): AuthServi
 
 function roomService(overrides: Partial<RoomService> = {}): RoomService {
   return {
-    listDefaultCommunityRooms: vi.fn(async () => ({
+    listDefaultCommunityRooms: vi.fn(async (_userId: string) => ({
       community: { slug: "default-community", name: "Default Community" },
       rooms: [
         {
@@ -40,7 +40,7 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
         }
       ]
     })),
-    roomBySlug: vi.fn(async (roomSlug: string) =>
+    roomBySlug: vi.fn(async (roomSlug: string, _userId: string) =>
       roomSlug === "main-lobby"
         ? {
             community: { slug: "default-community", name: "Default Community" },
@@ -121,7 +121,7 @@ describe("room routes", () => {
         })
       ]
     });
-    expect(rooms.listDefaultCommunityRooms).toHaveBeenCalled();
+    expect(rooms.listDefaultCommunityRooms).toHaveBeenCalledWith("user-1");
   });
 
   test("GET /rooms/:roomSlug returns room detail for authenticated users", async () => {
@@ -142,7 +142,7 @@ describe("room routes", () => {
         layoutVersion: 1
       })
     });
-    expect(rooms.roomBySlug).toHaveBeenCalledWith("main-lobby");
+    expect(rooms.roomBySlug).toHaveBeenCalledWith("main-lobby", "user-1");
   });
 
   test("GET /rooms/:roomSlug returns 404 when a room is missing", async () => {
@@ -211,6 +211,42 @@ describe("room routes", () => {
     const response = await server.inject({
       method: "GET",
       url: "api/rooms/main-lobby/messages",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "room access denied" });
+  });
+
+  test("GET /communities/default/rooms returns 403 when membership is missing", async () => {
+    const rooms = roomService({
+      listDefaultCommunityRooms: vi.fn(async () => {
+        throw new RoomAccessError();
+      })
+    });
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/communities/default/rooms",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "room access denied" });
+  });
+
+  test("GET /rooms/:roomSlug returns 403 when membership is missing", async () => {
+    const rooms = roomService({
+      roomBySlug: vi.fn(async () => {
+        throw new RoomAccessError();
+      })
+    });
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/rooms/main-lobby",
       cookies: { sl_session: "session-token" }
     });
 

@@ -13,6 +13,20 @@ export class PostgresRoomStore implements RoomStore {
     return community;
   }
 
+  async hasActiveMembership(userId: string, communityId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `SELECT 1
+       FROM memberships
+       WHERE user_id = $1
+         AND community_id = $2
+         AND status = 'active'
+       LIMIT 1`,
+      [userId, communityId]
+    );
+
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
   async roomsForCommunity(communityId: string): Promise<RoomRow[]> {
     const result = await this.pool.query<RoomQueryRow>(
       `SELECT

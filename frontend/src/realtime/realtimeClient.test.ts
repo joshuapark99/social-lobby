@@ -193,6 +193,22 @@ describe("createRealtimeClient", () => {
     ]);
   });
 
+  it("uses an explicit websocket base URL when provided", () => {
+    let socket: FakeWebSocket | undefined;
+    const client = createRealtimeClient({
+      baseUrl: "/api",
+      webSocketBaseUrl: "http://localhost:8081/api",
+      webSocketFactory: (url) => {
+        socket = new FakeWebSocket(url);
+        return socket as never;
+      }
+    });
+
+    client.connect("main-lobby");
+
+    expect(socket?.url).toBe("ws://localhost:8081/api/rooms/main-lobby/ws");
+  });
+
   it("sends teleport.request and replaces the active room from a new room.snapshot", () => {
     let socket: FakeWebSocket | undefined;
     const client = createRealtimeClient({

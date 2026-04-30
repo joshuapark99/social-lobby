@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { ApiError } from "../shared/apiClient";
 import type { ApiClient } from "../shared/apiClient";
 import type { RoomListResponse } from "./api";
 
-export function LobbyView({ apiClient }: { apiClient: ApiClient }) {
+export function LobbyView({ apiClient, onNavigate }: { apiClient: ApiClient; onNavigate?: (pathname: string) => void }) {
   const [rooms, setRooms] = useState<RoomListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,13 +19,19 @@ export function LobbyView({ apiClient }: { apiClient: ApiClient }) {
       })
       .catch((nextError: unknown) => {
         if (!active) return;
+        if (nextError instanceof ApiError && nextError.status === 403) {
+          const pathname = "/invite";
+          window.history.pushState({}, "", pathname);
+          onNavigate?.(pathname);
+          return;
+        }
         setError(nextError instanceof Error ? nextError.message : "Unable to load rooms.");
       });
 
     return () => {
       active = false;
     };
-  }, [apiClient]);
+  }, [apiClient, onNavigate]);
 
   if (error) {
     return (

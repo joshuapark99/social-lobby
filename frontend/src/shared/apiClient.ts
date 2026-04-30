@@ -1,5 +1,15 @@
 import type { RoomChatHistoryResponse, RoomDetailResponse, RoomListResponse } from "../rooms/api";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export interface ApiClient {
   readonly baseUrl: string;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
@@ -26,7 +36,7 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
         const body = (await response.json().catch(() => ({ error: "Unable to redeem invite." }))) as {
           error?: string;
         };
-        throw new Error(body.error ?? "Unable to redeem invite.");
+        throw new ApiError(body.error ?? "Unable to redeem invite.", response.status);
       }
 
       return (await response.json()) as { status: "redeemed" | "already-member"; communityId: string };
@@ -38,7 +48,7 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => ({ error: "Unable to load rooms." }))) as { error?: string };
-        throw new Error(body.error ?? "Unable to load rooms.");
+        throw new ApiError(body.error ?? "Unable to load rooms.", response.status);
       }
 
       return (await response.json()) as RoomListResponse;
@@ -50,7 +60,7 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => ({ error: "Unable to load room." }))) as { error?: string };
-        throw new Error(body.error ?? "Unable to load room.");
+        throw new ApiError(body.error ?? "Unable to load room.", response.status);
       }
 
       return (await response.json()) as RoomDetailResponse;
@@ -62,7 +72,7 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => ({ error: "Unable to load room chat." }))) as { error?: string };
-        throw new Error(body.error ?? "Unable to load room chat.");
+        throw new ApiError(body.error ?? "Unable to load room chat.", response.status);
       }
 
       return (await response.json()) as RoomChatHistoryResponse;

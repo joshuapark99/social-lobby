@@ -5,7 +5,7 @@ import type { RoomService } from "../rooms/service.js";
 function roomService(): RoomService {
   return {
     listDefaultCommunityRooms: vi.fn(),
-    roomBySlug: vi.fn(async (roomSlug: string) =>
+    roomBySlug: vi.fn(async (roomSlug: string, _userId: string) =>
       roomSlug === "main-lobby"
         ? {
             community: { slug: "default-community", name: "Default Community" },
@@ -69,7 +69,7 @@ describe("createTeleportService", () => {
     const store = teleportStore();
     const service = createTeleportService({ roomService: rooms, store });
 
-    const currentRoom = await rooms.roomBySlug("main-lobby");
+    const currentRoom = await rooms.roomBySlug("main-lobby", "user-1");
     const target = await service.teleport({
       currentRoom: currentRoom!,
       targetRoomSlug: "rooftop",
@@ -90,7 +90,7 @@ describe("createTeleportService", () => {
   test("throws room not found when the target is not listed on the current layout", async () => {
     const rooms = roomService();
     const service = createTeleportService({ roomService: rooms, store: teleportStore() });
-    const currentRoom = await rooms.roomBySlug("main-lobby");
+    const currentRoom = await rooms.roomBySlug("main-lobby", "user-1");
 
     await expect(service.teleport({
       currentRoom: currentRoom!,
@@ -107,7 +107,7 @@ describe("createTeleportService", () => {
         findAccessibleRoom: vi.fn(async () => null)
       })
     });
-    const currentRoom = await rooms.roomBySlug("main-lobby");
+    const currentRoom = await rooms.roomBySlug("main-lobby", "user-1");
 
     await expect(service.teleport({
       currentRoom: currentRoom!,

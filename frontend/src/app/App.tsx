@@ -40,7 +40,13 @@ export function App({
   const route = useMemo(() => parseRoute(pathname), [pathname]);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
   const [issue, setIssue] = useState<FrontendIssue | null>(null);
-  const [resolvedRealtimeClient] = useState(() => realtimeClient ?? createRealtimeClient({ baseUrl: apiClient.baseUrl }));
+  const [resolvedRealtimeClient] = useState(() =>
+    realtimeClient ??
+    createRealtimeClient({
+      baseUrl: apiClient.baseUrl,
+      webSocketBaseUrl: resolveRealtimeBaseUrl(apiClient.baseUrl)
+    })
+  );
   const resolvedRoute = useMemo(() => routeForSession(route, session), [route, session]);
 
   function reportIssue(nextIssue: FrontendIssue) {
@@ -94,6 +100,14 @@ export function App({
       </section>
     </main>
   );
+}
+
+function resolveRealtimeBaseUrl(apiBaseUrl: string): string {
+  if (typeof window === "undefined") return apiBaseUrl;
+  if (apiBaseUrl !== "/api") return apiBaseUrl;
+  if (!/^517\d$/.test(window.location.port)) return apiBaseUrl;
+
+  return `${window.location.protocol}//${window.location.hostname}:8081/api`;
 }
 
 function formatIssue(issue: FrontendIssue): string {
@@ -151,7 +165,7 @@ function RouteView({
     case "invite":
       return <InviteGate apiClient={apiClient} initialCode={route.code} />;
     case "lobby":
-      return <LobbyView apiClient={apiClient} />;
+      return <LobbyView apiClient={apiClient} onNavigate={onNavigate} />;
     case "room":
       return (
         <RoomView

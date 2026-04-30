@@ -48,6 +48,7 @@ type RealtimeSocket = {
 
 export function createRealtimeClient(options: {
   baseUrl?: string;
+  webSocketBaseUrl?: string;
   webSocketFactory?: (url: string) => RealtimeSocket;
 } = {}): RealtimeClient {
   const listeners = new Set<(state: RealtimeState) => void>();
@@ -76,7 +77,7 @@ export function createRealtimeClient(options: {
   function connect(roomSlug: string): () => void {
     activeSocket?.close();
 
-    const socket = webSocketFactory(websocketUrl(options.baseUrl ?? "/api", roomSlug));
+    const socket = webSocketFactory(websocketUrl(options.webSocketBaseUrl ?? options.baseUrl ?? "/api", roomSlug));
     activeSocket = socket;
     updateState({ status: "connecting", snapshot: null, messages: [], error: null });
 
