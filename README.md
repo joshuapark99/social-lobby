@@ -9,6 +9,15 @@ Invite-only social web app with a TypeScript Fastify backend and React/Vite fron
 
 ## Common Commands
 
+Repository root:
+
+```bash
+npm test
+npm run test:smoke
+npm run test:backend:integration
+npm run build
+```
+
 Backend:
 
 ```bash

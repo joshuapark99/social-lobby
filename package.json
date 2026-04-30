@@ -1,0 +1,14 @@
+{
+  "name": "social-lobby",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "npm --prefix backend test",
+    "test:backend:integration": "npm --prefix backend test -- src/test/testDatabase.test.ts src/test/postgresStores.test.ts",
+    "test:frontend": "npm --prefix frontend test",
+    "test:smoke": "npm --prefix frontend run test:smoke",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build"
+  }
+}
