@@ -21,7 +21,7 @@ export type FrontendIssue = {
   message: string;
 };
 
-interface AppProps {
+export interface AppProps {
   apiClient?: ApiClient;
   bootstrapSession?: BootstrapSession;
   errorReporter?: (issue: FrontendIssue) => void;
@@ -36,7 +36,8 @@ export function App({
   initialPathname = window.location.pathname,
   realtimeClient,
 }: AppProps) {
-  const route = useMemo(() => parseRoute(initialPathname), [initialPathname]);
+  const [pathname, setPathname] = useState(initialPathname);
+  const route = useMemo(() => parseRoute(pathname), [pathname]);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
   const [issue, setIssue] = useState<FrontendIssue | null>(null);
   const [resolvedRealtimeClient] = useState(() => realtimeClient ?? createRealtimeClient({ baseUrl: apiClient.baseUrl }));
@@ -46,6 +47,10 @@ export function App({
     setIssue(nextIssue);
     errorReporter?.(nextIssue);
   }
+
+  useEffect(() => {
+    setPathname(initialPathname);
+  }, [initialPathname]);
 
   useEffect(() => {
     let active = true;
@@ -79,7 +84,13 @@ export function App({
       </header>
       {issue ? <p role="alert">{formatIssue(issue)}</p> : null}
       <section className="content-panel">
-        <RouteView apiClient={apiClient} realtimeClient={resolvedRealtimeClient} route={resolvedRoute} reportIssue={reportIssue} />
+        <RouteView
+          apiClient={apiClient}
+          onNavigate={setPathname}
+          realtimeClient={resolvedRealtimeClient}
+          route={resolvedRoute}
+          reportIssue={reportIssue}
+        />
       </section>
     </main>
   );
@@ -123,11 +134,13 @@ function routeForSession(route: AppRoute, session: SessionState): AppRoute {
 
 function RouteView({
   apiClient,
+  onNavigate,
   reportIssue,
   realtimeClient,
   route,
 }: {
   apiClient: ApiClient;
+  onNavigate: (pathname: string) => void;
   realtimeClient: RealtimeClient;
   route: AppRoute;
   reportIssue: (issue: FrontendIssue) => void;
@@ -140,7 +153,15 @@ function RouteView({
     case "lobby":
       return <LobbyView apiClient={apiClient} />;
     case "room":
-      return <RoomView apiClient={apiClient} onOperationalIssue={reportIssue} realtimeClient={realtimeClient} roomSlug={route.roomId} />;
+      return (
+        <RoomView
+          apiClient={apiClient}
+          onNavigate={onNavigate}
+          onOperationalIssue={reportIssue}
+          realtimeClient={realtimeClient}
+          roomSlug={route.roomId}
+        />
+      );
     case "not-found":
       return <p>This route does not exist yet.</p>;
   }

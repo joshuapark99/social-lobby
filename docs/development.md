@@ -2,6 +2,32 @@
 
 Run commands from the repository root unless a section says otherwise.
 
+## Repository Test Commands
+
+```bash
+npm test
+```
+
+Runs the backend Vitest suite, including realtime protocol coverage such as
+`backend/src/realtime/routes.test.ts`, followed by the frontend Vitest suite.
+
+```bash
+npm run test:smoke
+```
+
+Runs the Playwright smoke suite against a local Vite server using injected
+frontend fakes for auth, room data, and realtime behavior. On this Raspberry
+Pi, Playwright also needs its browser binary plus the Linux desktop libraries
+required by Chromium.
+
+```bash
+npm run test:backend:integration
+```
+
+Runs the isolated Postgres integration tests that exercise migrations, seeded
+room metadata, session-backed identity lookup, invite redemption, chat
+persistence, and visited-room persistence against `TEST_DATABASE_URL`.
+
 ## Backend
 
 ```bash

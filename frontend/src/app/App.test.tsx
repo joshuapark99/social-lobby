@@ -280,4 +280,101 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "Not found" })).toBeInTheDocument();
   });
+
+  it("updates the route title when realtime room navigation changes the active room", async () => {
+    const listeners: Array<(state: RealtimeClient["snapshot"] extends never ? never : any) => void> = [];
+    const realtime = {
+      ...realtimeClient(),
+      subscribe: vi.fn((listener: (state: any) => void) => {
+        listeners.push(listener);
+        return () => undefined;
+      }),
+      connect: vi.fn(() => () => undefined)
+    };
+
+    const apiClient = {
+      baseUrl: "/api",
+      redeemInvite: vi.fn(),
+      listRooms: vi.fn(),
+      getRoom: vi.fn(async (roomSlug: string) => ({
+        community: { slug: "default-community", name: "Default Community" },
+        room:
+          roomSlug === "rooftop"
+            ? {
+                slug: "rooftop",
+                name: "Rooftop",
+                kind: "permanent",
+                isDefault: false,
+                layoutVersion: 1,
+                layout: {
+                  theme: "evening-rooftop",
+                  backgroundAsset: "rooms/rooftop.png",
+                  avatarStyleSet: "soft-rounded",
+                  objectPack: "rooftop-furniture-v1",
+                  width: 2200,
+                  height: 1400,
+                  spawnPoints: [{ x: 280, y: 380 }],
+                  collision: [],
+                  teleports: [{ label: "Lobby", targetRoom: "main-lobby" }]
+                }
+              }
+            : {
+                slug: "main-lobby",
+                name: "Main Lobby",
+                kind: "permanent",
+                isDefault: true,
+                layoutVersion: 1,
+                layout: {
+                  theme: "cozy-lobby",
+                  backgroundAsset: "rooms/main-lobby.png",
+                  avatarStyleSet: "soft-rounded",
+                  objectPack: "lobby-furniture-v1",
+                  width: 2400,
+                  height: 1600,
+                  spawnPoints: [{ x: 320, y: 420 }],
+                  collision: [],
+                  teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+                }
+              }
+      })),
+      listRoomMessages: vi.fn(async () => ({ messages: [] }))
+    };
+
+    render(
+      <App
+        apiClient={apiClient}
+        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        initialPathname="/rooms/main-lobby"
+        realtimeClient={realtime}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Room: main-lobby" })).toBeInTheDocument();
+
+    listeners[0]?.({
+      status: "connected",
+      snapshot: {
+        room: { slug: "rooftop", name: "Rooftop", layoutVersion: 1 },
+        self: {
+          connectionId: "conn-1",
+          userId: "user-1",
+          email: "june@example.com",
+          position: { x: 280, y: 380 }
+        },
+        occupants: [
+          {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "june@example.com",
+            position: { x: 280, y: 380 }
+          }
+        ]
+      },
+      messages: [],
+      error: null
+    });
+
+    expect(await screen.findByRole("heading", { name: "Room: rooftop" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Rooftop" })).toBeInTheDocument();
+  });
 });

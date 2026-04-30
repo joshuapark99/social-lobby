@@ -12,11 +12,13 @@ const interpolationStep = 24;
 
 export function RoomView({
   apiClient,
+  onNavigate,
   onOperationalIssue,
   realtimeClient,
   roomSlug,
 }: {
   apiClient: ApiClient;
+  onNavigate?: (pathname: string) => void;
   onOperationalIssue?: (issue: FrontendIssue) => void;
   realtimeClient: RealtimeClient;
   roomSlug: string;
@@ -53,8 +55,10 @@ export function RoomView({
     if (!realtime.snapshot?.room.slug || realtime.snapshot.room.slug === activeRoomSlug) return;
 
     setActiveRoomSlug(realtime.snapshot.room.slug);
-    window.history.pushState({}, "", `/rooms/${encodeURIComponent(realtime.snapshot.room.slug)}`);
-  }, [activeRoomSlug, realtime.snapshot?.room.slug]);
+    const pathname = `/rooms/${encodeURIComponent(realtime.snapshot.room.slug)}`;
+    window.history.pushState({}, "", pathname);
+    onNavigate?.(pathname);
+  }, [activeRoomSlug, onNavigate, realtime.snapshot?.room.slug]);
 
   useEffect(() => {
     let active = true;

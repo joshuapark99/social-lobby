@@ -6,6 +6,8 @@ dist/
 coverage/
 .cache/
 docs/superpowers/
+frontend/playwright-report/
+frontend/test-results/
 
 *.test
 *.out
