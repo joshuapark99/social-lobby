@@ -19,6 +19,11 @@ function realtimeClient(): RealtimeClient {
   };
 }
 
+type FrontendIssue = {
+  source: string;
+  message: string;
+};
+
 function renderApp(pathname: string, session: SessionState = { status: "anonymous" }) {
   const apiClient = {
     baseUrl: "/api",
@@ -187,6 +192,87 @@ describe("App", () => {
     renderApp("/lobby", { status: "error", message: "Session unavailable" });
 
     expect(await screen.findByText("Session unavailable")).toBeInTheDocument();
+  });
+
+  it("surfaces room load failures in the application alert region", async () => {
+    const errorReporter = vi.fn();
+    const apiClient = {
+      baseUrl: "/api",
+      redeemInvite: vi.fn(),
+      listRooms: vi.fn(),
+      getRoom: vi.fn(async () => {
+        throw new Error("Unable to load room.");
+      }),
+      listRoomMessages: vi.fn(async () => ({ messages: [] }))
+    };
+
+    render(
+      <App
+        apiClient={apiClient}
+        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        initialPathname="/rooms/main-hall"
+        realtimeClient={realtimeClient()}
+        errorReporter={errorReporter}
+      />
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Room load failed: Unable to load room.");
+    expect(errorReporter).toHaveBeenCalledWith({
+      message: "Unable to load room.",
+      source: "room_load"
+    } satisfies FrontendIssue);
+  });
+
+  it("surfaces realtime failures in the application alert region", async () => {
+    const errorReporter = vi.fn();
+    render(
+      <App
+        apiClient={{
+          baseUrl: "/api",
+          redeemInvite: vi.fn(),
+          listRooms: vi.fn(async () => ({
+            community: { slug: "default-community", name: "Default Community" },
+            rooms: []
+          })),
+          getRoom: vi.fn(async () => ({
+            community: { slug: "default-community", name: "Default Community" },
+            room: {
+              slug: "main-hall",
+              name: "Main Hall",
+              kind: "permanent",
+              isDefault: false,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-hall",
+                backgroundAsset: "rooms/main-hall.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "hall-furniture-v1",
+                width: 1800,
+                height: 1200,
+                spawnPoints: [{ x: 240, y: 360 }],
+                collision: [],
+                teleports: []
+              }
+            }
+          })),
+          listRoomMessages: vi.fn(async () => ({ messages: [] }))
+        }}
+        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        initialPathname="/rooms/main-hall"
+        realtimeClient={{
+          ...realtimeClient(),
+          status: "error",
+          error: "Realtime connection failed."
+        }}
+        errorReporter={errorReporter}
+      />
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Realtime issue: Realtime connection failed.");
+    expect(errorReporter).toHaveBeenCalledWith({
+      message: "Realtime connection failed.",
+      source: "realtime"
+    } satisfies FrontendIssue);
   });
 
   it("renders not found for unknown routes", async () => {

@@ -16,9 +16,15 @@ import type { ApiClient } from "../shared/apiClient";
 import { createApiClient } from "../shared/apiClient";
 import { type AppRoute, parseRoute } from "./routing";
 
+export type FrontendIssue = {
+  source: string;
+  message: string;
+};
+
 interface AppProps {
   apiClient?: ApiClient;
   bootstrapSession?: BootstrapSession;
+  errorReporter?: (issue: FrontendIssue) => void;
   initialPathname?: string;
   realtimeClient?: RealtimeClient;
 }
@@ -26,13 +32,20 @@ interface AppProps {
 export function App({
   apiClient = createApiClient(),
   bootstrapSession = defaultBootstrapSession,
+  errorReporter,
   initialPathname = window.location.pathname,
   realtimeClient,
 }: AppProps) {
   const route = useMemo(() => parseRoute(initialPathname), [initialPathname]);
   const [session, setSession] = useState<SessionState>({ status: "loading" });
+  const [issue, setIssue] = useState<FrontendIssue | null>(null);
   const [resolvedRealtimeClient] = useState(() => realtimeClient ?? createRealtimeClient({ baseUrl: apiClient.baseUrl }));
   const resolvedRoute = useMemo(() => routeForSession(route, session), [route, session]);
+
+  function reportIssue(nextIssue: FrontendIssue) {
+    setIssue(nextIssue);
+    errorReporter?.(nextIssue);
+  }
 
   useEffect(() => {
     let active = true;
@@ -46,6 +59,7 @@ export function App({
       .catch(() => {
         if (active) {
           setSession({ status: "error", message: "Unable to check session." });
+          reportIssue({ source: "session", message: "Unable to check session." });
         }
       });
 
@@ -63,11 +77,25 @@ export function App({
         </div>
         <SessionBadge session={session} />
       </header>
+      {issue ? <p role="alert">{formatIssue(issue)}</p> : null}
       <section className="content-panel">
-        <RouteView apiClient={apiClient} realtimeClient={resolvedRealtimeClient} route={resolvedRoute} />
+        <RouteView apiClient={apiClient} realtimeClient={resolvedRealtimeClient} route={resolvedRoute} reportIssue={reportIssue} />
       </section>
     </main>
   );
+}
+
+function formatIssue(issue: FrontendIssue): string {
+  switch (issue.source) {
+    case "room_load":
+      return `Room load failed: ${issue.message}`;
+    case "realtime":
+      return `Realtime issue: ${issue.message}`;
+    case "session":
+      return `Session issue: ${issue.message}`;
+    default:
+      return issue.message;
+  }
 }
 
 function routeTitle(route: AppRoute) {
@@ -95,12 +123,14 @@ function routeForSession(route: AppRoute, session: SessionState): AppRoute {
 
 function RouteView({
   apiClient,
+  reportIssue,
   realtimeClient,
   route,
 }: {
   apiClient: ApiClient;
   realtimeClient: RealtimeClient;
   route: AppRoute;
+  reportIssue: (issue: FrontendIssue) => void;
 }) {
   switch (route.name) {
     case "welcome":
@@ -110,7 +140,7 @@ function RouteView({
     case "lobby":
       return <LobbyView apiClient={apiClient} />;
     case "room":
-      return <RoomView apiClient={apiClient} realtimeClient={realtimeClient} roomSlug={route.roomId} />;
+      return <RoomView apiClient={apiClient} onOperationalIssue={reportIssue} realtimeClient={realtimeClient} roomSlug={route.roomId} />;
     case "not-found":
       return <p>This route does not exist yet.</p>;
   }

@@ -460,6 +460,75 @@ describe("realtime room routes", () => {
     });
   });
 
+  test("exposes websocket connection, occupancy, and room event metrics", async () => {
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const snapshotPromise = onceMessage(socket);
+    socket.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await snapshotPromise;
+
+    const acceptedPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "move.request",
+      payload: {
+        roomSlug: "main-lobby",
+        destination: { x: 640, y: 520 },
+        source: "pointer"
+      }
+    }));
+    await acceptedPromise;
+
+    const response = await server.inject({ method: "GET", url: "api/metrics" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('sl_realtime_connections_active 1');
+    expect(response.body).toContain('sl_room_occupants_active{room_slug="main-lobby"} 1');
+    expect(response.body).toContain('sl_realtime_events_total{direction="in",event_type="room.join",result="accepted"} 1');
+    expect(response.body).toContain('sl_realtime_events_total{direction="in",event_type="move.request",result="accepted"} 1');
+  });
+
+  test("logs websocket lifecycle events with room and user context", async () => {
+    const eventLogger = vi.fn();
+    const loggedServer = buildServer({
+      config: loadConfig({}),
+      authService: authService(),
+      roomService: roomService(),
+      chatService: chatService(),
+      teleportService: teleportService(roomService()),
+      eventLogger
+    });
+    await loggedServer.ready();
+
+    const socket = rememberSocket(await loggedServer.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const snapshotPromise = onceMessage(socket);
+    socket.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
+    await snapshotPromise;
+    socket.terminate();
+
+    await vi.waitFor(() => {
+      expect(eventLogger).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "realtime.room.joined",
+          roomSlug: "main-lobby",
+          userId: "user-1"
+        })
+      );
+      expect(eventLogger).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "realtime.connection.closed",
+          roomSlug: "main-lobby",
+          userId: "user-1"
+        })
+      );
+    });
+
+    await loggedServer.close();
+  });
+
   function rememberSocket(socket: WebSocket): WebSocket {
     sockets.push(socket);
     return socket;

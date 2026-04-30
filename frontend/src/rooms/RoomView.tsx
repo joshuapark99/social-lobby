@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
+import type { FrontendIssue } from "../app/App";
 import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
 import type { ApiClient } from "../shared/apiClient";
 import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
@@ -11,10 +12,12 @@ const interpolationStep = 24;
 
 export function RoomView({
   apiClient,
+  onOperationalIssue,
   realtimeClient,
   roomSlug,
 }: {
   apiClient: ApiClient;
+  onOperationalIssue?: (issue: FrontendIssue) => void;
   realtimeClient: RealtimeClient;
   roomSlug: string;
 }) {
@@ -67,7 +70,9 @@ export function RoomView({
       })
       .catch((nextError: unknown) => {
         if (!active) return;
-        setError(nextError instanceof Error ? nextError.message : "Unable to load room.");
+        const message = nextError instanceof Error ? nextError.message : "Unable to load room.";
+        setError(message);
+        onOperationalIssue?.({ source: "room_load", message });
       });
 
     apiClient
@@ -87,6 +92,11 @@ export function RoomView({
 
   useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
   useEffect(() => realtimeClient.connect(activeRoomSlug), [activeRoomSlug, realtimeClient]);
+  useEffect(() => {
+    if (realtime.status !== "error" || !realtime.error) return;
+
+    onOperationalIssue?.({ source: "realtime", message: realtime.error });
+  }, [onOperationalIssue, realtime.error, realtime.status]);
   useEffect(() => {
     if (realtime.messages.length === 0) return;
 
