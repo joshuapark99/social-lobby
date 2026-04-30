@@ -4,6 +4,7 @@ import { createRoomService, type RoomStore } from "./service.js";
 function roomStore(overrides: Partial<RoomStore> = {}): RoomStore {
   return {
     defaultCommunity: async () => ({ id: "community-1", slug: "default-community", name: "Default Community" }),
+    hasActiveMembership: async () => true,
     roomsForCommunity: async () => [
       {
         id: "room-1",
@@ -83,7 +84,7 @@ describe("room service", () => {
   test("lists validated room metadata for the default community", async () => {
     const service = createRoomService({ store: roomStore() });
 
-    await expect(service.listDefaultCommunityRooms()).resolves.toEqual({
+    await expect(service.listDefaultCommunityRooms("user-1")).resolves.toEqual({
       community: {
         slug: "default-community",
         name: "Default Community"
@@ -108,7 +109,7 @@ describe("room service", () => {
   test("returns room detail for a known room slug", async () => {
     const service = createRoomService({ store: roomStore() });
 
-    await expect(service.roomBySlug("main-lobby")).resolves.toEqual({
+    await expect(service.roomBySlug("main-lobby", "user-1")).resolves.toEqual({
       community: {
         slug: "default-community",
         name: "Default Community"
@@ -154,6 +155,17 @@ describe("room service", () => {
       })
     });
 
-    await expect(service.listDefaultCommunityRooms()).rejects.toThrow('teleport 0 targets unknown room slug "unknown-room"');
+    await expect(service.listDefaultCommunityRooms("user-1")).rejects.toThrow('teleport 0 targets unknown room slug "unknown-room"');
+  });
+
+  test("rejects room access when the user is not an active community member", async () => {
+    const service = createRoomService({
+      store: roomStore({
+        hasActiveMembership: async () => false
+      })
+    });
+
+    await expect(service.listDefaultCommunityRooms("user-1")).rejects.toThrow("room access denied");
+    await expect(service.roomBySlug("main-lobby", "user-1")).rejects.toThrow("room access denied");
   });
 });

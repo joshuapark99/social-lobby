@@ -21,7 +21,7 @@ describe("parseRoute", () => {
   });
 
   it("returns not-found for removed login and unknown paths", () => {
-    expect(parseRoute("/invite")).toEqual({ name: "not-found" });
+    expect(parseRoute("/invite")).toEqual({ name: "invite", code: "" });
     expect(parseRoute("/rooms")).toEqual({ name: "not-found" });
     expect(parseRoute("/login")).toEqual({ name: "not-found" });
     expect(parseRoute("/settings")).toEqual({ name: "not-found" });

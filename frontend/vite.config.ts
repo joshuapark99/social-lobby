@@ -5,8 +5,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      "/api/rooms": {
+        target: "ws://127.0.0.1:8081",
+        changeOrigin: true,
+        ws: true,
+      },
       "/api": {
-        target: "http://localhost:8081",
+        target: "http://127.0.0.1:8081",
         changeOrigin: true,
       },
     },

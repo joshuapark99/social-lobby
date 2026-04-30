@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import type { FrontendIssue } from "../app/App";
 import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
-import type { ApiClient } from "../shared/apiClient";
+import { ApiError, type ApiClient } from "../shared/apiClient";
 import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
 import { deriveRemoteOccupants, interpolateOccupantPositions } from "./pixiRoomCanvasState";
 import { PixiRoomCanvas } from "./PixiRoomCanvas";
@@ -74,6 +74,12 @@ export function RoomView({
       })
       .catch((nextError: unknown) => {
         if (!active) return;
+        if (nextError instanceof ApiError && nextError.status === 403) {
+          const pathname = "/invite";
+          window.history.pushState({}, "", pathname);
+          onNavigate?.(pathname);
+          return;
+        }
         const message = nextError instanceof Error ? nextError.message : "Unable to load room.";
         setError(message);
         onOperationalIssue?.({ source: "room_load", message });
@@ -85,8 +91,13 @@ export function RoomView({
         if (!active) return;
         setMessages((current) => mergeMessages(current, response.messages));
       })
-      .catch(() => {
+      .catch((nextError: unknown) => {
         if (!active) return;
+        if (nextError instanceof ApiError && nextError.status === 403) {
+          const pathname = "/invite";
+          window.history.pushState({}, "", pathname);
+          onNavigate?.(pathname);
+        }
       });
 
     return () => {
@@ -95,7 +106,11 @@ export function RoomView({
   }, [activeRoomSlug, apiClient]);
 
   useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
-  useEffect(() => realtimeClient.connect(activeRoomSlug), [activeRoomSlug, realtimeClient]);
+  useEffect(() => {
+    if (!room || error) return;
+
+    return realtimeClient.connect(activeRoomSlug);
+  }, [activeRoomSlug, error, realtimeClient, room]);
   useEffect(() => {
     if (realtime.status !== "error" || !realtime.error) return;
 

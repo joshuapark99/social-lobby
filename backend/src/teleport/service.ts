@@ -33,7 +33,7 @@ export function createTeleportService(options: { roomService: RoomService; store
         userId: input.userId
       });
       if (!accessibleRoom) {
-        const room = await options.roomService.roomBySlug(input.targetRoomSlug);
+        const room = await options.roomService.roomBySlug(input.targetRoomSlug, input.userId);
         if (!room) {
           throw new Error("room not found");
         }
@@ -45,7 +45,7 @@ export function createTeleportService(options: { roomService: RoomService; store
         roomId: accessibleRoom.id
       });
 
-      const room = await options.roomService.roomBySlug(input.targetRoomSlug);
+      const room = await options.roomService.roomBySlug(input.targetRoomSlug, input.userId);
       if (!room) {
         throw new Error("room not found");
       }

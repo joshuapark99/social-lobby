@@ -40,19 +40,30 @@ export type RoomRow = {
 
 export type RoomStore = {
   defaultCommunity(): Promise<{ id: string; slug: string; name: string }>;
+  hasActiveMembership(userId: string, communityId: string): Promise<boolean>;
   roomsForCommunity(communityId: string): Promise<RoomRow[]>;
   roomBySlug(roomSlug: string): Promise<RoomRow | null>;
 };
 
 export type RoomService = {
-  listDefaultCommunityRooms(): Promise<RoomListResponse>;
-  roomBySlug(roomSlug: string): Promise<RoomMetadataResponse | null>;
+  listDefaultCommunityRooms(userId: string): Promise<RoomListResponse>;
+  roomBySlug(roomSlug: string, userId: string): Promise<RoomMetadataResponse | null>;
 };
+
+export class RoomAccessError extends Error {
+  constructor(message = "room access denied") {
+    super(message);
+    this.name = "RoomAccessError";
+  }
+}
 
 export function createRoomService(options: { store: RoomStore }): RoomService {
   return {
-    async listDefaultCommunityRooms() {
+    async listDefaultCommunityRooms(userId) {
       const community = await options.store.defaultCommunity();
+      const hasMembership = await options.store.hasActiveMembership(userId, community.id);
+      if (!hasMembership) throw new RoomAccessError();
+
       const rows = await options.store.roomsForCommunity(community.id);
       const roomSlugs = rows.map((row) => row.slug);
 
@@ -64,9 +75,12 @@ export function createRoomService(options: { store: RoomStore }): RoomService {
         rooms: rows.map((row) => toRoomMetadata(row, roomSlugs))
       };
     },
-    async roomBySlug(roomSlug) {
+    async roomBySlug(roomSlug, userId) {
       const row = await options.store.roomBySlug(roomSlug);
       if (!row) return null;
+
+      const hasMembership = await options.store.hasActiveMembership(userId, row.communityId);
+      if (!hasMembership) throw new RoomAccessError();
 
       const communityRows = await options.store.roomsForCommunity(row.communityId);
       const roomSlugs = communityRows.map((candidate) => candidate.slug);
@@ -91,6 +105,10 @@ export function disabledRoomService(): RoomService {
       throw new Error("rooms are not configured");
     }
   };
+}
+
+export function isRoomAccessError(error: unknown): error is RoomAccessError {
+  return error instanceof RoomAccessError;
 }
 
 function toRoomMetadata(row: RoomRow, roomSlugs: string[]): RoomMetadata {

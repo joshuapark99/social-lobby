@@ -20,6 +20,10 @@ export function parseRoute(pathname: string): AppRoute {
     return { name: "lobby" };
   }
 
+  if (segments.length === 1 && segments[0] === "invite") {
+    return { name: "invite", code: "" };
+  }
+
   if (segments.length === 2 && segments[0] === "invite") {
     return { name: "invite", code: decodeURIComponent(segments[1]) };
   }

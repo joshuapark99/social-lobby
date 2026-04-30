@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { SessionState } from "../auth/session";
 import type { RealtimeClient } from "../realtime/realtimeClient";
+import { ApiError } from "../shared/apiClient";
 
 function realtimeClient(): RealtimeClient {
   return {
@@ -221,6 +222,31 @@ describe("App", () => {
       message: "Unable to load room.",
       source: "room_load"
     } satisfies FrontendIssue);
+  });
+
+  it("redirects authenticated room access to invite redemption when membership is missing", async () => {
+    render(
+      <App
+        apiClient={{
+          baseUrl: "/api",
+          redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+          listRooms: vi.fn(async () => ({
+            community: { slug: "default-community", name: "Default Community" },
+            rooms: []
+          })),
+          getRoom: vi.fn(async () => {
+            throw new ApiError("room access denied", 403);
+          }),
+          listRoomMessages: vi.fn(async () => ({ messages: [] }))
+        }}
+        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        initialPathname="/rooms/main-lobby"
+        realtimeClient={realtimeClient()}
+      />
+    );
+
+    expect(await screen.findByRole("heading", { name: "Redeem invite" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Invite code")).toHaveValue("");
   });
 
   it("surfaces realtime failures in the application alert region", async () => {
