@@ -12,6 +12,7 @@ import { PostgresRoomStore } from "./rooms/postgresStore.js";
 import { buildServer } from "./server/server.js";
 import { PostgresTeleportStore } from "./teleport/postgresStore.js";
 import { createTeleportService, disabledTeleportService } from "./teleport/service.js";
+import type { ReadinessResult } from "./server/observability.js";
 
 const config = loadConfig();
 let authService = disabledAuthService();
@@ -43,7 +44,31 @@ if (config.databaseUrl) {
   });
 }
 
-const server = buildServer({ config, authService, chatService, inviteService, roomService, teleportService });
+const server = buildServer({
+  config,
+  authService,
+  chatService,
+  inviteService,
+  roomService,
+  teleportService,
+  readinessCheck: async (): Promise<ReadinessResult> => {
+    if (!pool) {
+      return { ready: true };
+    }
+
+    try {
+      await pool.query("SELECT 1");
+      return { ready: true };
+    } catch {
+      return {
+        ready: false,
+        checks: {
+          database: "unreachable"
+        }
+      };
+    }
+  }
+});
 const { host, port } = parseHttpAddr(config.httpAddr);
 
 const shutdown = async () => {

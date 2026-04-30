@@ -13,6 +13,7 @@ import { disabledRoomService, type RoomService } from "../rooms/service.js";
 import { registerRoomRoutes } from "../rooms/routes.js";
 import { disabledTeleportService, type TeleportService } from "../teleport/service.js";
 import { registerHealthRoutes } from "./healthRoutes.js";
+import { Observability, type EventLogger, type ReadinessCheck } from "./observability.js";
 
 export function buildServer(options: {
   config: Config;
@@ -21,23 +22,47 @@ export function buildServer(options: {
   inviteService?: InviteService;
   roomService?: RoomService;
   teleportService?: TeleportService;
+  eventLogger?: EventLogger;
+  readinessCheck?: ReadinessCheck;
 }): FastifyInstance {
   const server = Fastify();
+  const observability = new Observability();
   const authService = options.authService ?? defaultAuthService(options.config);
   const chatService = options.chatService ?? disabledChatService();
   const inviteService = options.inviteService ?? disabledInviteService();
   const roomService = options.roomService ?? disabledRoomService();
   const teleportService = options.teleportService ?? disabledTeleportService();
+  const eventLogger = options.eventLogger ?? ((event: Record<string, unknown>) => server.log.info(event));
+  const readinessCheck =
+    options.readinessCheck ??
+    (async () => ({
+      ready: true
+    }));
 
   void server.register(cookie);
   void server.register(websocket);
 
-  registerHealthRoutes(server);
+  server.addHook("onResponse", async (request, reply) => {
+    observability.recordHttpRequest({
+      method: request.method,
+      route: request.routeOptions.url ?? request.url,
+      statusCode: reply.statusCode
+    });
+    eventLogger({
+      event: "http.request.completed",
+      method: request.method,
+      requestId: request.id,
+      route: request.routeOptions.url ?? request.url,
+      statusCode: reply.statusCode
+    });
+  });
+
+  registerHealthRoutes(server, { observability, readinessCheck });
   registerAuthRoutes(server, { config: options.config, authService });
   registerInviteRoutes(server, { authService, inviteService });
   registerRoomRoutes(server, { authService, roomService, chatService });
   void server.register(async (instance) => {
-    registerRealtimeRoutes(instance, { authService, roomService, chatService, teleportService });
+    registerRealtimeRoutes(instance, { authService, roomService, chatService, teleportService, observability, eventLogger });
   });
 
   return server;

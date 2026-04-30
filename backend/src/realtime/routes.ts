@@ -6,6 +6,7 @@ import { requireIdentity } from "../auth/http.js";
 import type { AuthService, OidcIdentity } from "../auth/service.js";
 import { isChatAccessError, type ChatService } from "../chat/service.js";
 import type { RoomMetadataResponse, RoomService } from "../rooms/service.js";
+import type { EventLogger, Observability } from "../server/observability.js";
 import { isTeleportAccessError, type TeleportService } from "../teleport/service.js";
 import { resolveMovementDestination } from "./movement.js";
 import { InMemoryPresenceRegistry } from "./presence.js";
@@ -28,6 +29,8 @@ export function registerRealtimeRoutes(
     roomService: RoomService;
     teleportService: TeleportService;
     presenceRegistry?: InMemoryPresenceRegistry;
+    observability: Observability;
+    eventLogger: EventLogger;
   }
 ): void {
   const presenceRegistry = options.presenceRegistry ?? new InMemoryPresenceRegistry();
@@ -60,6 +63,11 @@ export function registerRealtimeRoutes(
       if (!initialRoomSlug) {
         return;
       }
+      options.observability.connectionOpened();
+      options.eventLogger({
+        event: "realtime.connection.opened",
+        roomSlug: initialRoomSlug
+      });
 
       const identityPromise = options.authService.session(sessionToken);
       let currentRoomSlug = initialRoomSlug;
@@ -94,6 +102,14 @@ export function registerRealtimeRoutes(
               const connectionId = occupant.connectionId;
               joinedConnectionId = connectionId;
               const occupants = presenceRegistry.join(room.room.slug, occupant, connection);
+              options.observability.recordRealtimeEvent({ direction: "in", eventType: envelope.type, result: "accepted" });
+              options.observability.roomOccupancyChanged(room.room.slug, occupants.length);
+              options.eventLogger({
+                event: "realtime.room.joined",
+                roomSlug: room.room.slug,
+                userId: occupant.userId,
+                connectionId
+              });
 
               send(
                 connection,
@@ -138,6 +154,7 @@ export function registerRealtimeRoutes(
                 send(connection, buildErrorEvent("join_required", "room.join must be processed before movement", move.requestId));
                 return;
               }
+              options.observability.recordRealtimeEvent({ direction: "in", eventType: envelope.type, result: "accepted" });
 
               const accepted = buildServerEvent("movement.accepted", { occupant }, move.requestId);
               send(connection, accepted);
@@ -186,6 +203,7 @@ export function registerRealtimeRoutes(
 
               const removed = presenceRegistry.leave(currentRoomSlug, joinedConnectionId);
               if (removed) {
+                options.observability.roomOccupancyChanged(currentRoomSlug, presenceRegistry.occupants(currentRoomSlug).length);
                 broadcast(
                   presenceRegistry.peers(currentRoomSlug, removed.connectionId),
                   buildServerEvent("presence.left", {
@@ -198,6 +216,8 @@ export function registerRealtimeRoutes(
               currentRoomSlug = targetRoom.room.slug;
               const occupant = createOccupant(authenticatedIdentity, targetRoom, joinedConnectionId);
               const occupants = presenceRegistry.join(currentRoomSlug, occupant, connection);
+              options.observability.recordRealtimeEvent({ direction: "in", eventType: envelope.type, result: "accepted" });
+              options.observability.roomOccupancyChanged(currentRoomSlug, occupants.length);
 
               send(
                 connection,
@@ -250,6 +270,7 @@ export function registerRealtimeRoutes(
 
                 throw error;
               }
+              options.observability.recordRealtimeEvent({ direction: "in", eventType: envelope.type, result: "accepted" });
               const createdEvent = buildServerEvent("chat.message", { message: created }, chat.requestId);
               send(connection, createdEvent);
               broadcast(presenceRegistry.peers(currentRoomSlug, joinedConnectionId), createdEvent);
@@ -261,14 +282,17 @@ export function registerRealtimeRoutes(
             }
           }
         } catch (error) {
+          options.observability.recordRealtimeEvent({ direction: "in", eventType: "invalid_event", result: "rejected" });
           send(connection, buildErrorEvent("invalid_event", errorMessage(error)));
           connection.close(1008, "invalid event");
         }
       });
 
       connection.on("close", () => {
-        if (cleanedUp || !joinedConnectionId) return;
+        if (cleanedUp) return;
         cleanedUp = true;
+        options.observability.connectionClosed();
+        if (!joinedConnectionId) return;
         const connectionId = joinedConnectionId;
         const roomSlug = currentRoomSlug;
 
@@ -277,6 +301,13 @@ export function registerRealtimeRoutes(
 
           const removed = presenceRegistry.leave(roomSlug, connectionId);
           if (!removed) return;
+          options.observability.roomOccupancyChanged(roomSlug, presenceRegistry.occupants(roomSlug).length);
+          options.eventLogger({
+            event: "realtime.connection.closed",
+            roomSlug,
+            userId: removed.userId,
+            connectionId: removed.connectionId
+          });
 
           broadcast(
             presenceRegistry.peers(roomSlug, removed.connectionId),
