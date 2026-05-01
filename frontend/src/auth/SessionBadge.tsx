@@ -6,7 +6,7 @@ export function SessionBadge({ session }: { session: SessionState }) {
   }
 
   if (session.status === "authenticated") {
-    return <p className="session-badge">Signed in as {session.user.displayName}</p>;
+    return <p className="session-badge">Signed in as {session.user.username ?? session.user.displayName}</p>;
   }
 
   if (session.status === "error") {

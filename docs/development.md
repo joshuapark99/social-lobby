@@ -28,6 +28,19 @@ Runs the isolated Postgres integration tests that exercise migrations, seeded
 room metadata, session-backed identity lookup, invite redemption, chat
 persistence, and visited-room persistence against `TEST_DATABASE_URL`.
 
+## Cross-Platform Git
+
+If you work from Windows or WSL with the repo on a mounted Windows filesystem
+such as `/mnt/c`, disable filemode tracking in this clone to avoid accidental
+`100644 -> 100755` permission churn:
+
+```bash
+git config core.filemode false
+```
+
+The repo also ships a `.gitattributes` file to keep text files normalized to
+LF across Linux, WSL, and Windows checkouts.
+
 ## Backend
 
 ```bash

@@ -95,11 +95,20 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
     window.__SOCIAL_LOBBY_APP_PROPS__ = {
       bootstrapSession: async () =>
         session === "authenticated"
-          ? { status: "authenticated", user: { displayName: "June" } }
+          ? {
+              status: "authenticated",
+              user: {
+                displayName: "June",
+                email: "june@example.com",
+                username: "June",
+                needsUsername: false
+              }
+            }
           : { status: "anonymous" },
       realtimeClient: realtime,
       apiClient: {
         baseUrl: "/api",
+        updateProfile: async () => ({ displayName: "June", username: "June" }),
         redeemInvite: async () => ({ status: "redeemed", communityId: "community-1" }),
         listRooms: async () => ({
           community: { slug: "default-community", name: "Default Community" },
