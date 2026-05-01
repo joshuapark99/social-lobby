@@ -10,6 +10,7 @@ function authService(userId = "user-1", email = "person@example.com"): AuthServi
   return {
     loginUrl: vi.fn(),
     completeLogin: vi.fn(),
+    updateProfile: vi.fn(),
     session: vi.fn(async () => ({ userId, provider: "google", subject: "subject", email })),
     logout: vi.fn()
   };

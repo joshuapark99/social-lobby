@@ -16,6 +16,9 @@ export function defaultAuthService(config: Config): AuthService {
     async session() {
       return null;
     },
+    async updateProfile() {
+      throw new Error("auth session store is not configured");
+    },
     async logout() {
       return undefined;
     }

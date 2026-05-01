@@ -16,6 +16,7 @@ export type OidcIdentity = {
   subject: string;
   email: string;
   name?: string;
+  username?: string;
 };
 
 export class OidcProvider {

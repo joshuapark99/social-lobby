@@ -11,6 +11,7 @@ function authService(userId = "user-1", email = "person@example.com"): AuthServi
   return {
     loginUrl: vi.fn(),
     completeLogin: vi.fn(),
+    updateProfile: vi.fn(),
     session: vi.fn(async (token: string) => {
       if (token === "session-token") {
         return { userId, provider: "google", subject: "subject", email };

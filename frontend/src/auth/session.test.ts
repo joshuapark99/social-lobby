@@ -11,13 +11,23 @@ describe("bootstrapSession", () => {
       "fetch",
       vi.fn(async () => ({
         ok: true,
-        json: async () => ({ email: "person@example.com" })
+        json: async () => ({
+          email: "person@example.com",
+          displayName: "June",
+          username: "June",
+          needsUsername: false
+        })
       }))
     );
 
     await expect(bootstrapSession()).resolves.toEqual({
       status: "authenticated",
-      user: { displayName: "person@example.com" }
+      user: {
+        displayName: "June",
+        email: "person@example.com",
+        username: "June",
+        needsUsername: false
+      }
     });
     expect(fetch).toHaveBeenCalledWith("/api/auth/session", { credentials: "include" });
   });
