@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LobbyView } from "./LobbyView";
 import type { ApiClient } from "../shared/apiClient";
@@ -6,6 +6,7 @@ import type { ApiClient } from "../shared/apiClient";
 function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     baseUrl: "/api",
+    updateProfile: vi.fn(),
     redeemInvite: vi.fn(),
     listRooms: vi.fn(async () => ({
       community: { slug: "default-community", name: "Default Community" },
@@ -36,28 +37,32 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   };
 }
 
-describe("LobbyView", () => {
-  it("renders loading then the room list", async () => {
-    render(<LobbyView apiClient={apiClient()} />);
+const session = {
+  status: "authenticated" as const,
+  user: {
+    displayName: "June",
+    email: "june@example.com",
+    username: "June",
+    needsUsername: false
+  }
+};
 
-    expect(screen.getByText("Loading rooms...")).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Default Community" })).toBeInTheDocument();
-    expect(screen.getByText("Main Lobby")).toBeInTheDocument();
-    expect(screen.getByText("Theme: cozy-lobby")).toBeInTheDocument();
-    expect(screen.getByText("2400 x 1600")).toBeInTheDocument();
+describe("LobbyView", () => {
+  it("renders the personal-room landing experience", async () => {
+    render(<LobbyView apiClient={apiClient()} session={session} />);
+
+    expect(screen.getByRole("heading", { name: "June's Room" })).toBeInTheDocument();
+    expect(screen.getByText("Open transit console")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Personal room feed" })).toBeInTheDocument();
+    expect(screen.getByText(/Open the transit console/i)).toBeInTheDocument();
   });
 
-  it("renders an error state when room loading fails", async () => {
-    render(
-      <LobbyView
-        apiClient={apiClient({
-          listRooms: vi.fn(async () => {
-            throw new Error("Unable to load rooms.");
-          })
-        })}
-      />
-    );
+  it("opens the directory and loads rooms", async () => {
+    render(<LobbyView apiClient={apiClient()} session={session} />);
 
-    await waitFor(() => expect(screen.getByText("Unable to load rooms.")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Open transit console" }));
+
+    expect(await screen.findByRole("heading", { name: "Pick your next room" })).toBeInTheDocument();
+    expect(await screen.findByText("Main Lobby")).toBeInTheDocument();
   });
 });

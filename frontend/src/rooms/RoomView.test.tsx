@@ -8,6 +8,7 @@ import type { RoomChatMessage } from "../rooms/api";
 function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     baseUrl: "/api",
+    updateProfile: vi.fn(),
     redeemInvite: vi.fn(),
     listRooms: vi.fn(),
     getRoom: vi.fn(async () => ({
@@ -75,11 +76,7 @@ describe("RoomView", () => {
 
     expect(screen.getByText("Loading room...")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
-    expect(screen.getByText("Theme: cozy-lobby")).toBeInTheDocument();
-    expect(screen.getByText("Layout version: 1")).toBeInTheDocument();
-    expect(screen.getByText("Spawn points: 1")).toBeInTheDocument();
-    expect(screen.getByText("Collision rectangles: 1")).toBeInTheDocument();
-    expect(screen.getByText("Teleports: Rooftop")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Teleport to Rooftop" })).toBeInTheDocument();
   });
 
   it("renders an error state when room metadata loading fails", async () => {
@@ -98,7 +95,7 @@ describe("RoomView", () => {
     await waitFor(() => expect(screen.getByText("Unable to load room.")).toBeInTheDocument());
   });
 
-  it("renders active occupant count from realtime snapshot state", async () => {
+  it("renders the room title from realtime-backed room state", async () => {
     render(
       <RoomView
         apiClient={apiClient()}
@@ -132,7 +129,7 @@ describe("RoomView", () => {
       />
     );
 
-    expect(await screen.findByText("Active occupants: 2")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
   });
 
   it("renders the Pixi room canvas once room metadata loads", async () => {
@@ -144,7 +141,7 @@ describe("RoomView", () => {
   it("renders room layout without avatars when realtime is idle", async () => {
     render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient({ status: "idle", snapshot: null })} roomSlug="main-lobby" />);
 
-    expect(await screen.findByText("Active occupants: 0")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
     expect(screen.getByLabelText("Pixi room canvas")).toBeInTheDocument();
   });
 
@@ -187,7 +184,7 @@ describe("RoomView", () => {
       })
     });
 
-    fireEvent.click(canvas, { clientX: 200, clientY: 100 });
+    fireEvent.mouseDown(canvas, { clientX: 200, clientY: 100 });
 
     expect(client.requestMovement).toHaveBeenCalledWith({
       roomSlug: "main-lobby",

@@ -1,162 +1,661 @@
 :root {
-  color: #172026;
-  background: #f5f7f8;
+  color: #f8f0e2;
+  background: #c16b3d;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Segoe UI Variable", "Trebuchet MS", "Gill Sans", sans-serif;
+  --bg-surface: rgba(42, 27, 19, 0.72);
+  --bg-surface-strong: rgba(28, 18, 12, 0.88);
+  --line-soft: rgba(255, 237, 211, 0.18);
+  --accent-strong: #ffd4a7;
+  --copy-soft: rgba(255, 242, 224, 0.78);
+  --chat-name: #ffbf73;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background:
+    radial-gradient(circle at top, rgba(255, 203, 142, 0.4), transparent 35%),
+    linear-gradient(160deg, #5f2f1f 0%, #271710 58%, #130c08 100%);
 }
 
 .app-shell {
   min-height: 100vh;
-  background: #f5f7f8;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 173, 99, 0.24), transparent 26%),
+    radial-gradient(circle at 80% 10%, rgba(255, 216, 168, 0.16), transparent 18%);
+}
+
+.app-shell-immersive {
+  overflow: hidden;
 }
 
 .top-bar {
   align-items: center;
-  background: #ffffff;
-  border-bottom: 1px solid #d8dee3;
+  background: rgba(19, 12, 8, 0.72);
+  border-bottom: 1px solid var(--line-soft);
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  padding: 20px 28px;
+  padding: 14px 22px;
 }
 
-.eyebrow {
-  color: #4f6270;
-  font-size: 0.78rem;
+.top-bar-immersive {
+  background: transparent;
+  border-bottom: none;
+  left: 0;
+  padding: 10px 16px;
+  pointer-events: none;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 18;
+}
+
+.top-bar-immersive .session-badge,
+.top-bar-immersive .accent-button,
+.top-bar-immersive button,
+.top-bar-immersive a {
+  pointer-events: auto;
+}
+
+.top-bar-immersive h1 {
+  font-size: 1rem;
+  opacity: 0.0001;
+}
+
+.top-bar-immersive .eyebrow {
+  margin-bottom: 4px;
+}
+
+.top-bar-immersive .session-badge {
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+.eyebrow,
+.section-kicker {
+  color: var(--accent-strong);
+  font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0;
-  margin: 0 0 6px;
+  letter-spacing: 0.18em;
+  margin: 0 0 12px;
   text-transform: uppercase;
 }
 
 h1,
 h2,
+h3,
 p {
   margin-top: 0;
 }
 
+h1,
+h2,
+h3 {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
 h1 {
-  font-size: 1.65rem;
+  font-size: clamp(1.8rem, 3vw, 2.75rem);
   line-height: 1.2;
   margin-bottom: 0;
 }
 
 h2 {
-  font-size: 1rem;
+  font-size: clamp(1.35rem, 2vw, 2rem);
+}
+
+h3 {
+  font-size: 1.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.section-copy,
+.section-footnote,
+.muted {
+  color: var(--copy-soft);
+}
+
+.section-copy {
+  line-height: 1.6;
+}
+
+.section-footnote,
+.muted {
+  font-size: 0.92rem;
 }
 
 .session-badge {
-  background: #edf2f4;
-  border: 1px solid #d8dee3;
-  border-radius: 8px;
-  color: #28343c;
+  background: rgba(255, 226, 190, 0.08);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--accent-strong);
   flex-shrink: 0;
   font-size: 0.9rem;
   margin: 0;
   max-width: 260px;
   overflow-wrap: anywhere;
-  padding: 8px 10px;
+  padding: 8px 12px;
 }
 
 .session-badge-error {
-  background: #fff0ed;
-  border-color: #f0b8ad;
-  color: #8f2c1f;
+  background: rgba(191, 79, 45, 0.22);
+  border-color: rgba(255, 136, 101, 0.4);
+  color: #ffd6c4;
 }
 
 .content-panel {
   padding: 28px;
 }
 
-.stack > * + * {
-  margin-top: 12px;
+.content-panel-immersive {
+  padding: 0;
 }
 
-.muted {
-  color: #667783;
-  font-size: 0.92rem;
+.app-alert {
+  margin: 16px 28px 0;
 }
 
-.invite-form {
-  max-width: 420px;
+.app-alert-immersive {
+  background: rgba(99, 22, 12, 0.78);
+  border: 1px solid rgba(255, 198, 184, 0.36);
+  border-radius: 16px;
+  color: #ffd8cc;
+  left: 24px;
+  margin: 0;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 12px 14px;
+  position: fixed;
+  top: 20px;
+  z-index: 35;
 }
 
+.welcome-hero,
+.onboarding-shell {
+  align-items: center;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  min-height: calc(100vh - 172px);
+}
+
+.welcome-hero__copy,
+.onboarding-card {
+  background: linear-gradient(180deg, rgba(42, 27, 19, 0.84), rgba(22, 14, 10, 0.9));
+  border: 1px solid var(--line-soft);
+  border-radius: 28px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.26);
+  padding: 36px;
+}
+
+.welcome-hero__copy h2,
+.onboarding-card h2 {
+  font-size: clamp(2.4rem, 5vw, 4.7rem);
+  line-height: 1;
+  margin-bottom: 18px;
+  max-width: 12ch;
+}
+
+.welcome-hero__art img,
+.onboarding-art img {
+  display: block;
+  width: 100%;
+}
+
+.welcome-hero__actions {
+  margin-top: 28px;
+}
+
+.google-button,
+.accent-button,
+.username-form button,
+.twitch-chat__input-row button,
+.portal-button,
+.room-card,
+.room-stage__hotspot,
+.ghost-button,
+.inline-form button {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.google-button,
+.accent-button,
+.username-form button,
+.twitch-chat__input-row button {
+  align-items: center;
+  background: linear-gradient(135deg, #ffb16b 0%, #ff8b53 100%);
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 20px 30px rgba(255, 136, 83, 0.22);
+  color: #2a170f;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 800;
+  justify-content: center;
+  padding: 14px 22px;
+  text-decoration: none;
+}
+
+.google-button:hover,
+.accent-button:hover,
+.username-form button:hover,
+.twitch-chat__input-row button:hover,
+.portal-button:hover,
+.room-card:hover,
+.room-stage__hotspot:hover,
+.ghost-button:hover,
+.inline-form button:hover {
+  transform: translateY(-2px);
+}
+
+.identity-chip {
+  align-items: center;
+  background: rgba(255, 239, 216, 0.08);
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  display: flex;
+  gap: 14px;
+  margin: 24px 0;
+  padding: 16px;
+}
+
+.identity-chip p,
+.identity-chip strong {
+  margin: 0;
+}
+
+.identity-chip__avatar {
+  height: 72px;
+  width: 72px;
+}
+
+.username-form {
+  display: grid;
+  gap: 12px;
+  max-width: 380px;
+}
+
+.username-form label,
+.twitch-chat__composer label,
 .invite-form label {
+  color: var(--accent-strong);
   display: block;
   font-weight: 700;
   margin-bottom: 8px;
 }
 
-.inline-form {
+.username-form input,
+.twitch-chat__input-row input,
+.inline-form input {
+  background: rgba(255, 242, 224, 0.08);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  color: #fff7ed;
+  font: inherit;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.invite-form {
+  max-width: 100%;
+}
+
+.inline-form,
+.twitch-chat__input-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .inline-form input {
-  border: 1px solid #b9c4cc;
-  border-radius: 6px;
   flex: 1;
-  font: inherit;
-  min-width: 0;
-  padding: 9px 10px;
 }
 
-.inline-form button {
-  background: #1f6f68;
-  border: 1px solid #1a5d57;
-  border-radius: 6px;
-  color: #ffffff;
+.inline-form button,
+.ghost-button {
+  background: rgba(255, 170, 106, 0.16);
+  border: 1px solid rgba(255, 170, 106, 0.32);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  cursor: pointer;
   font: inherit;
   font-weight: 700;
-  padding: 9px 14px;
+  padding: 10px 16px;
 }
 
-.inline-form button:disabled {
-  background: #8ca6a3;
-  border-color: #8ca6a3;
+.inline-form button:disabled,
+.username-form button:disabled {
+  opacity: 0.55;
 }
 
 .form-message {
-  color: #1f6f45;
+  color: #cbecc8;
   margin-top: 12px;
 }
 
 .form-message-error {
-  color: #8f2c1f;
+  color: #ffc6b8;
 }
 
 .room-layout {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  min-height: 100vh;
+  position: relative;
 }
 
-.room-surface,
+.room-stage,
 .chat-panel {
-  background: #ffffff;
-  border: 1px solid #d8dee3;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 24px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.24);
   min-height: 320px;
+  overflow: hidden;
   padding: 18px;
+  position: relative;
 }
 
-.room-surface {
-  align-items: stretch;
-  justify-content: flex-start;
+.room-stage {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.room-stage__background {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.room-stage__hud,
+.room-stage__avatar-card,
+.room-stage__hotspot,
+.room-stage__canvas-shell,
+.portal-strip,
+.room-stage__hint {
+  position: relative;
+  z-index: 1;
+}
+
+.room-stage__hud {
+  align-items: flex-start;
+  background: linear-gradient(180deg, rgba(12, 8, 6, 0.58), rgba(12, 8, 6, 0));
+  border-radius: 18px;
+  display: block;
+  left: 16px;
+  max-width: min(420px, calc(100vw - 120px));
+  padding: 48px 16px 12px;
+  position: absolute;
+  top: 12px;
+}
+
+.room-stage__hud h2 {
+  margin: 0;
+}
+
+.room-stage__directory-button {
+  position: absolute;
+  right: 24px;
+  top: 72px;
+  z-index: 2;
+}
+
+.room-stage__canvas-shell {
+  background: rgba(19, 12, 8, 0.08);
+  border: 1px solid rgba(255, 242, 224, 0.12);
+  border-radius: 24px;
+  height: min(72vh, 980px);
+  inset: 0;
+  margin: 0;
+  position: absolute;
+  overflow: hidden;
+  width: 100%;
+}
+
+.room-stage__avatar-card {
+  align-items: center;
+  background: rgba(28, 18, 12, 0.8);
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  bottom: 138px;
+  display: flex;
+  gap: 14px;
+  left: 28px;
+  padding: 14px;
+  position: absolute;
+}
+
+.room-stage__avatar-card img {
+  height: 66px;
+  width: 66px;
+}
+
+.room-stage__avatar-card p,
+.room-stage__avatar-card strong {
+  margin: 0;
+}
+
+.room-stage__hotspot {
+  align-items: flex-start;
+  background: rgba(255, 242, 224, 0.14);
+  border: 1px solid rgba(255, 214, 167, 0.38);
+  border-radius: 22px;
+  color: #fff4e1;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  position: absolute;
+  right: 28px;
+  bottom: 142px;
+}
+
+.room-stage__hotspot small {
+  color: var(--copy-soft);
+}
+
+.portal-strip {
+  display: flex;
+  gap: 12px;
+  bottom: 16px;
+  left: 16px;
+  padding: 0;
+  position: absolute;
+}
+
+.portal-button,
+.room-card {
+  background: rgba(255, 240, 220, 0.12);
+  border: 1px solid var(--line-soft);
+  border-radius: 20px;
+  color: #fff6e7;
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.portal-button strong,
+.room-card__meta strong {
+  display: block;
+}
+
+.portal-button span,
+.room-card__meta span {
+  color: var(--copy-soft);
+}
+
+.room-stage__hint {
+  color: var(--copy-soft);
+  bottom: 86px;
+  margin: 0;
+  position: absolute;
+  right: 24px;
+}
+
+.room-stage-personal::after {
+  background:
+    radial-gradient(circle at 24% 30%, rgba(255, 232, 186, 0.4), transparent 20%),
+    linear-gradient(180deg, rgba(22, 14, 10, 0.04), rgba(22, 14, 10, 0.4));
+  content: "";
+  inset: 0;
+  position: absolute;
 }
 
 .pixi-room-canvas {
-  background: linear-gradient(180deg, #f4efe4 0%, #d9e7eb 100%);
-  border: 1px solid #d8dee3;
-  border-radius: 8px;
-  min-height: 320px;
-  overflow: hidden;
+  background: transparent;
+  cursor: crosshair;
+  height: 100%;
+  min-height: 420px;
   width: 100%;
+}
+
+.chat-panel {
+  background: rgba(22, 14, 10, 0.64);
+  max-height: calc(100vh - 48px);
+  position: absolute;
+  right: 24px;
+  top: 24px;
+  width: min(360px, calc(100vw - 48px));
+  z-index: 12;
+}
+
+.chat-panel__header h2 {
+  margin-bottom: 6px;
+}
+
+.twitch-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 48px);
+}
+
+.twitch-chat__messages {
+  background:
+    linear-gradient(180deg, rgba(255, 241, 225, 0.04), rgba(255, 241, 225, 0.02)),
+    rgba(8, 5, 4, 0.32);
+  border: 1px solid rgba(255, 241, 225, 0.08);
+  border-radius: 18px;
+  flex: 1;
+  margin: 18px 0;
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.twitch-chat__messages ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.twitch-chat__messages li + li {
+  margin-top: 10px;
+}
+
+.twitch-chat__name {
+  color: var(--chat-name);
+  font-weight: 800;
+  margin-right: 8px;
+}
+
+.twitch-chat__body {
+  color: #fff7eb;
+}
+
+.twitch-chat__separator {
+  color: var(--copy-soft);
+}
+
+.room-directory {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 20;
+}
+
+.room-directory-open {
+  pointer-events: auto;
+}
+
+.room-directory__scrim {
+  background: rgba(8, 5, 4, 0.5);
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  transition: opacity 180ms ease;
+}
+
+.room-directory-open .room-directory__scrim {
+  opacity: 1;
+}
+
+.room-directory__panel {
+  background: var(--bg-surface-strong);
+  border-left: 1px solid var(--line-soft);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.28);
+  height: 100%;
+  margin-left: auto;
+  max-width: 440px;
+  overflow: auto;
+  padding: 28px;
+  position: relative;
+  transform: translateX(100%);
+  transition: transform 200ms ease;
+  width: min(100%, 440px);
+}
+
+.room-directory-open .room-directory__panel {
+  transform: translateX(0);
+}
+
+.room-directory__header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.room-directory__list {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0 30px;
+}
+
+.room-card {
+  align-items: center;
+}
+
+.room-card__thumb {
+  border-radius: 14px;
+  height: 78px;
+  object-fit: cover;
+  width: 108px;
+}
+
+.room-card__meta {
+  display: grid;
+  gap: 4px;
+}
+
+.room-card-active {
+  outline: 2px solid rgba(255, 212, 167, 0.6);
+}
+
+.room-directory__invite {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 20px;
 }
 
 @media (max-width: 760px) {
@@ -169,7 +668,85 @@ h2 {
     padding: 18px;
   }
 
-  .room-layout {
+  .content-panel-immersive {
+    padding: 0;
+  }
+
+  .welcome-hero,
+  .onboarding-shell {
     grid-template-columns: 1fr;
+  }
+
+  .welcome-hero__copy,
+  .onboarding-card {
+    padding: 24px;
+  }
+
+  .room-stage {
+    min-height: 100svh;
+    padding: 18px;
+  }
+
+  .room-stage__hud,
+  .portal-strip,
+  .room-directory__header {
+    flex-direction: column;
+  }
+
+  .room-stage__canvas-shell {
+    height: 50vh;
+    inset: 0;
+    width: 100%;
+  }
+
+  .room-stage__avatar-card,
+  .room-stage__hotspot {
+    bottom: auto;
+    left: 22px;
+    margin-top: 16px;
+    position: relative;
+    right: auto;
+  }
+
+  .room-stage__hud {
+    left: 10px;
+    max-width: calc(100vw - 132px);
+    padding: 42px 14px 10px;
+    top: 8px;
+  }
+
+  .room-stage__directory-button {
+    right: 10px;
+    top: 56px;
+  }
+
+  .portal-strip {
+    bottom: 52svh;
+    left: 10px;
+    right: 10px;
+  }
+
+  .room-stage__hint {
+    bottom: 50svh;
+    left: 10px;
+    right: auto;
+  }
+
+  .room-directory__panel {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .chat-panel {
+    border-radius: 24px 24px 0 0;
+    bottom: 0;
+    max-height: 48svh;
+    right: 0;
+    top: auto;
+    width: 100%;
+  }
+
+  .twitch-chat {
+    min-height: 48svh;
   }
 }

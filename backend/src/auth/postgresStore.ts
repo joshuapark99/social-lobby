@@ -62,9 +62,10 @@ export class PostgresAuthStore implements AuthStore {
       provider_subject: string;
       email: string;
       display_name: string;
+      username: string | null;
       user_id: string;
     }>(
-      `SELECT us.user_id, li.provider, li.provider_subject, li.email, u.display_name
+      `SELECT us.user_id, li.provider, li.provider_subject, li.email, u.display_name, u.username
        FROM user_sessions us
        JOIN users u ON u.id = us.user_id
        JOIN linked_identities li ON li.user_id = u.id
@@ -77,7 +78,44 @@ export class PostgresAuthStore implements AuthStore {
     );
     const row = result.rows[0];
     if (!row) return null;
-    return { userId: row.user_id, provider: row.provider, subject: row.provider_subject, email: row.email, name: row.display_name };
+    return {
+      userId: row.user_id,
+      provider: row.provider,
+      subject: row.provider_subject,
+      email: row.email,
+      name: row.display_name,
+      username: row.username ?? undefined
+    };
+  }
+
+  async updateProfile(input: { userId: string; username: string; displayName: string }): Promise<{ username: string; displayName: string }> {
+    try {
+      const result = await this.pool.query<{ username: string; display_name: string }>(
+        `UPDATE users
+         SET username = $2,
+             display_name = $3,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING username, display_name`,
+        [input.userId, input.username, input.displayName]
+      );
+
+      const row = result.rows[0];
+      if (!row) {
+        throw new Error("user not found");
+      }
+
+      return {
+        username: row.username,
+        displayName: row.display_name
+      };
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new Error("username is already taken");
+      }
+
+      throw error;
+    }
   }
 
   async revokeSession(tokenHash: string): Promise<void> {
@@ -85,4 +123,8 @@ export class PostgresAuthStore implements AuthStore {
       tokenHash
     ]);
   }
+}
+
+function isUniqueViolation(error: unknown): error is { code: string } {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
 }

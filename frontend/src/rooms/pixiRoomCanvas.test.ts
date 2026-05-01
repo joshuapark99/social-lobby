@@ -118,7 +118,7 @@ describe("PixiRoomCanvas", () => {
     expect(screen.getByLabelText("Pixi room canvas")).toBeInTheDocument();
   });
 
-  it("emits normalized click coordinates through the callback", () => {
+  it("emits normalized pointer coordinates through the callback", () => {
     const onPointerIntent = vi.fn();
 
     render(
@@ -145,7 +145,7 @@ describe("PixiRoomCanvas", () => {
       })
     });
 
-    fireEvent.click(canvasHost, { clientX: 200, clientY: 100 });
+    fireEvent.mouseDown(canvasHost, { clientX: 200, clientY: 100 });
 
     expect(onPointerIntent).toHaveBeenCalledWith({ x: 0.5, y: 0.5 });
   });

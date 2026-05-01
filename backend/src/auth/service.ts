@@ -8,6 +8,7 @@ export type AuthStore = {
   findOrCreateUserByIdentity(identity: OidcIdentity): Promise<string>;
   createSession(userId: string, tokenHash: string, expiresAt: Date): Promise<void>;
   findIdentityBySessionHash(tokenHash: string, now: Date): Promise<OidcIdentity | null>;
+  updateProfile(input: { userId: string; username: string; displayName: string }): Promise<{ username: string; displayName: string }>;
   revokeSession(tokenHash: string): Promise<void>;
 };
 
@@ -24,6 +25,7 @@ export type AuthService = {
     csrfToken: string;
   }>;
   session(sessionToken: string): Promise<OidcIdentity | null>;
+  updateProfile(input: { userId: string; username: string }): Promise<{ username: string; displayName: string }>;
   logout(sessionToken: string): Promise<void>;
 };
 
@@ -50,6 +52,14 @@ export function createAuthService(options: {
     async session(sessionToken: string) {
       return options.store.findIdentityBySessionHash(hashSessionToken(sessionToken), now());
     },
+    async updateProfile(input) {
+      const username = normalizeUsername(input.username);
+      return options.store.updateProfile({
+        userId: input.userId,
+        username,
+        displayName: username
+      });
+    },
     async logout(sessionToken: string) {
       await options.store.revokeSession(hashSessionToken(sessionToken));
     }
@@ -67,8 +77,20 @@ export function disabledAuthService(): AuthService {
     async session() {
       return null;
     },
+    async updateProfile() {
+      throw new Error("auth is not configured");
+    },
     async logout() {
       return undefined;
     }
   };
+}
+
+export function normalizeUsername(rawUsername: string): string {
+  const username = rawUsername.trim();
+  if (!/^[a-zA-Z0-9_]{3,24}$/.test(username)) {
+    throw new Error("username must be 3-24 characters using letters, numbers, or underscores");
+  }
+
+  return username;
 }

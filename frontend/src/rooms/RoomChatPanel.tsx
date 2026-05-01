@@ -1,0 +1,46 @@
+import { type FormEvent } from "react";
+import type { RoomChatMessage } from "./api";
+
+export function RoomChatPanel({
+  title,
+  subtitle,
+  messages,
+  draft,
+  onDraftChange,
+  onSubmit
+}: {
+  title: string;
+  subtitle: string;
+  messages: RoomChatMessage[];
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section aria-label="Room chat" className="chat-panel twitch-chat">
+      <div className="chat-panel__header">
+        <p className="section-kicker">{title}</p>
+        <h2>{subtitle}</h2>
+      </div>
+      <div className="twitch-chat__messages">
+        {messages.length === 0 ? <p className="muted">The room is quiet right now.</p> : null}
+        <ul>
+          {messages.map((message) => (
+            <li key={message.id}>
+              <span className="twitch-chat__name">{message.userName}</span>
+              <span className="twitch-chat__separator">: </span>
+              <span className="twitch-chat__body">{message.body}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <form className="twitch-chat__composer" onSubmit={onSubmit}>
+        <label htmlFor="room-chat-input">Message</label>
+        <div className="twitch-chat__input-row">
+          <input id="room-chat-input" onChange={(event) => onDraftChange(event.target.value)} value={draft} />
+          <button type="submit">Send</button>
+        </div>
+      </form>
+    </section>
+  );
+}

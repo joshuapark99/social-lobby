@@ -1,66 +1,93 @@
-import { useEffect, useState } from "react";
-import { ApiError } from "../shared/apiClient";
+import { type FormEvent, useState } from "react";
 import type { ApiClient } from "../shared/apiClient";
-import type { RoomListResponse } from "./api";
+import type { SessionState } from "../auth/session";
+import { RoomChatPanel } from "./RoomChatPanel";
+import { RoomDirectory } from "./RoomDirectory";
+import { personalRoomFor, personalRoomMessages } from "./personalRoom";
 
-export function LobbyView({ apiClient, onNavigate }: { apiClient: ApiClient; onNavigate?: (pathname: string) => void }) {
-  const [rooms, setRooms] = useState<RoomListResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function LobbyView({
+  apiClient,
+  onNavigate,
+  session
+}: {
+  apiClient: ApiClient;
+  onNavigate?: (pathname: string) => void;
+  session: Extract<SessionState, { status: "authenticated" }>;
+}) {
+  const room = personalRoomFor(session.user.username ?? session.user.displayName);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [chatDraft, setChatDraft] = useState("");
+  const [messages, setMessages] = useState(() => personalRoomMessages(session.user.username ?? session.user.displayName));
 
-  useEffect(() => {
-    let active = true;
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = chatDraft.trim();
+    if (!body) return;
 
-    apiClient
-      .listRooms()
-      .then((response) => {
-        if (!active) return;
-        setRooms(response);
-        setError(null);
-      })
-      .catch((nextError: unknown) => {
-        if (!active) return;
-        if (nextError instanceof ApiError && nextError.status === 403) {
-          const pathname = "/invite";
-          window.history.pushState({}, "", pathname);
-          onNavigate?.(pathname);
-          return;
-        }
-        setError(nextError instanceof Error ? nextError.message : "Unable to load rooms.");
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [apiClient, onNavigate]);
-
-  if (error) {
-    return (
-      <div className="stack">
-        <p>{error}</p>
-      </div>
-    );
+    setMessages((current) => [
+      ...current,
+      {
+        id: `personal-${current.length + 1}`,
+        roomSlug: room.room.slug,
+        userId: "self",
+        userName: session.user.username ?? session.user.displayName,
+        body,
+        createdAt: new Date().toISOString()
+      }
+    ]);
+    setChatDraft("");
   }
 
-  if (!rooms) {
-    return (
-      <div className="stack">
-        <p>Loading rooms...</p>
-      </div>
-    );
+  function handleNavigate(roomSlug: string) {
+    setDirectoryOpen(false);
+    const pathname = `/rooms/${encodeURIComponent(roomSlug)}`;
+    window.history.pushState({}, "", pathname);
+    onNavigate?.(pathname);
   }
 
   return (
-    <div className="stack">
-      <h2>{rooms.community.name}</h2>
-      {rooms.rooms.map((room) => (
-        <section key={room.slug} className="stack">
-          <h3>{room.name}</h3>
-          <p className="muted">{room.slug}</p>
-          <p>{`Theme: ${room.layout.theme}`}</p>
-          <p>{`${room.layout.width} x ${room.layout.height}`}</p>
-          {room.isDefault ? <p>Default room</p> : null}
+    <>
+      <div className="room-layout">
+        <section aria-label="Room canvas" className="room-stage room-stage-personal">
+          <img alt="" className="room-stage__background" src="/rooms/personal-suite.svg" />
+          <div className="room-stage__hud">
+            <div>
+              <p className="section-kicker">Personal room</p>
+              <h2>{room.room.name}</h2>
+              <p className="section-copy">Your landing space. Open the console to jump into shared rooms or redeem a fresh invite code.</p>
+            </div>
+            <button className="accent-button" onClick={() => setDirectoryOpen(true)} type="button">
+              Open transit console
+            </button>
+          </div>
+          <div className="room-stage__avatar-card">
+            <img alt="" src="/avatars/default-user.svg" />
+            <div>
+              <strong>{session.user.username ?? session.user.displayName}</strong>
+              <p>Spawned and ready</p>
+            </div>
+          </div>
+          <button className="room-stage__hotspot" onClick={() => setDirectoryOpen(true)} type="button">
+            <span>Transit Console</span>
+            <small>Click to browse rooms or redeem an invite</small>
+          </button>
         </section>
-      ))}
-    </div>
+        <RoomChatPanel
+          draft={chatDraft}
+          messages={messages}
+          onDraftChange={setChatDraft}
+          onSubmit={handleSubmit}
+          subtitle="Personal room feed"
+          title="Room chat"
+        />
+      </div>
+      <RoomDirectory
+        apiClient={apiClient}
+        currentRoomSlug={room.room.slug}
+        isOpen={directoryOpen}
+        onClose={() => setDirectoryOpen(false)}
+        onSelectRoom={handleNavigate}
+      />
+    </>
   );
 }

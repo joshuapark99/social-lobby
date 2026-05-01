@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -25,9 +25,23 @@ type FrontendIssue = {
   message: string;
 };
 
+function authenticatedSession(overrides: Partial<Extract<SessionState, { status: "authenticated" }>["user"]> = {}): SessionState {
+  return {
+    status: "authenticated",
+    user: {
+      displayName: "June",
+      email: "june@example.com",
+      username: "June",
+      needsUsername: false,
+      ...overrides
+    }
+  };
+}
+
 function renderApp(pathname: string, session: SessionState = { status: "anonymous" }) {
   const apiClient = {
     baseUrl: "/api",
+    updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
     redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
     listRooms: vi.fn(async () => ({
       community: { slug: "default-community", name: "Default Community" },
@@ -103,6 +117,7 @@ describe("App", () => {
   it("redeems the invite code through the API client", async () => {
     const apiClient = {
       baseUrl: "/api",
+      updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
       redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
       listRooms: vi.fn(),
       getRoom: vi.fn(),
@@ -111,7 +126,7 @@ describe("App", () => {
     render(
       <App
         apiClient={apiClient}
-        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        bootstrapSession={() => Promise.resolve(authenticatedSession())}
         initialPathname="/invite/friend-code"
         realtimeClient={realtimeClient()}
       />,
@@ -124,16 +139,16 @@ describe("App", () => {
   });
 
   it("renders the lobby route", async () => {
-    renderApp("/lobby", { status: "authenticated", user: { displayName: "June" } });
+    renderApp("/lobby", authenticatedSession());
 
     expect(await screen.findByRole("heading", { name: "Lobby" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Default Community" })).toBeInTheDocument();
-    expect(screen.getByText("Main Lobby")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "June's Room" })).toBeInTheDocument();
+    expect(screen.getByText("Open transit console")).toBeInTheDocument();
     expect(screen.getByText("Signed in as June")).toBeInTheDocument();
   });
 
   it("renders the room route with canvas and chat regions", async () => {
-    renderApp("/rooms/main-hall", { status: "authenticated", user: { displayName: "June" } });
+    renderApp("/rooms/main-hall", authenticatedSession());
 
     expect(await screen.findByRole("heading", { name: "Room: main-hall" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Room canvas" })).toBeInTheDocument();
@@ -169,6 +184,7 @@ describe("App", () => {
   it("does not mount protected room content while session bootstrap is loading", () => {
     const apiClient = {
       baseUrl: "/api",
+      updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
       listRooms: vi.fn(),
       getRoom: vi.fn(),
@@ -199,6 +215,7 @@ describe("App", () => {
     const errorReporter = vi.fn();
     const apiClient = {
       baseUrl: "/api",
+      updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
       listRooms: vi.fn(),
       getRoom: vi.fn(async () => {
@@ -210,7 +227,7 @@ describe("App", () => {
     render(
       <App
         apiClient={apiClient}
-        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        bootstrapSession={() => Promise.resolve(authenticatedSession())}
         initialPathname="/rooms/main-hall"
         realtimeClient={realtimeClient()}
         errorReporter={errorReporter}
@@ -229,6 +246,7 @@ describe("App", () => {
       <App
         apiClient={{
           baseUrl: "/api",
+          updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
           redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
           listRooms: vi.fn(async () => ({
             community: { slug: "default-community", name: "Default Community" },
@@ -239,7 +257,7 @@ describe("App", () => {
           }),
           listRoomMessages: vi.fn(async () => ({ messages: [] }))
         }}
-        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        bootstrapSession={() => Promise.resolve(authenticatedSession())}
         initialPathname="/rooms/main-lobby"
         realtimeClient={realtimeClient()}
       />
@@ -255,6 +273,7 @@ describe("App", () => {
       <App
         apiClient={{
           baseUrl: "/api",
+          updateProfile: vi.fn(),
           redeemInvite: vi.fn(),
           listRooms: vi.fn(async () => ({
             community: { slug: "default-community", name: "Default Community" },
@@ -283,7 +302,7 @@ describe("App", () => {
           })),
           listRoomMessages: vi.fn(async () => ({ messages: [] }))
         }}
-        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        bootstrapSession={() => Promise.resolve(authenticatedSession())}
         initialPathname="/rooms/main-hall"
         realtimeClient={{
           ...realtimeClient(),
@@ -320,6 +339,7 @@ describe("App", () => {
 
     const apiClient = {
       baseUrl: "/api",
+      updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
       listRooms: vi.fn(),
       getRoom: vi.fn(async (roomSlug: string) => ({
@@ -369,7 +389,7 @@ describe("App", () => {
     render(
       <App
         apiClient={apiClient}
-        bootstrapSession={() => Promise.resolve({ status: "authenticated", user: { displayName: "June" } })}
+        bootstrapSession={() => Promise.resolve(authenticatedSession())}
         initialPathname="/rooms/main-lobby"
         realtimeClient={realtime}
       />
@@ -377,27 +397,29 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "Room: main-lobby" })).toBeInTheDocument();
 
-    listeners[0]?.({
-      status: "connected",
-      snapshot: {
-        room: { slug: "rooftop", name: "Rooftop", layoutVersion: 1 },
-        self: {
-          connectionId: "conn-1",
-          userId: "user-1",
-          email: "june@example.com",
-          position: { x: 280, y: 380 }
-        },
-        occupants: [
-          {
+    await act(async () => {
+      listeners[0]?.({
+        status: "connected",
+        snapshot: {
+          room: { slug: "rooftop", name: "Rooftop", layoutVersion: 1 },
+          self: {
             connectionId: "conn-1",
             userId: "user-1",
             email: "june@example.com",
             position: { x: 280, y: 380 }
-          }
-        ]
-      },
-      messages: [],
-      error: null
+          },
+          occupants: [
+            {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "june@example.com",
+              position: { x: 280, y: 380 }
+            }
+          ]
+        },
+        messages: [],
+        error: null
+      });
     });
 
     expect(await screen.findByRole("heading", { name: "Room: rooftop" })).toBeInTheDocument();

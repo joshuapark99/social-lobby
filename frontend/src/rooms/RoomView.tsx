@@ -1,14 +1,15 @@
 import { type FormEvent, useEffect, useState } from "react";
 import type { FrontendIssue } from "../app/App";
-import type { RealtimeClient, RealtimeState } from "../realtime/realtimeClient";
+import type { RealtimeClient, RealtimeOccupant, RealtimeState } from "../realtime/realtimeClient";
 import { ApiError, type ApiClient } from "../shared/apiClient";
 import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
-import { deriveRemoteOccupants, interpolateOccupantPositions } from "./pixiRoomCanvasState";
+import { deriveRemoteOccupants } from "./pixiRoomCanvasState";
 import { PixiRoomCanvas } from "./PixiRoomCanvas";
 import type { RoomChatMessage, RoomDetailResponse } from "./api";
+import { RoomChatPanel } from "./RoomChatPanel";
+import { RoomDirectory } from "./RoomDirectory";
 
 const keyboardStep = 80;
-const interpolationStep = 24;
 
 export function RoomView({
   apiClient,
@@ -28,24 +29,15 @@ export function RoomView({
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
+  const [directoryOpen, setDirectoryOpen] = useState(false);
+  const [displayedLocalOccupant, setDisplayedLocalOccupant] = useState<RealtimeOccupant | null>(null);
+  const [displayedRemoteOccupants, setDisplayedRemoteOccupants] = useState<RealtimeOccupant[]>([]);
   const [realtime, setRealtime] = useState<RealtimeState>(() => ({
     status: realtimeClient.status,
     snapshot: realtimeClient.snapshot,
     messages: realtimeClient.messages,
     error: realtimeClient.error
   }));
-  const [renderedOccupants, setRenderedOccupants] = useState(() => realtimeClient.snapshot?.occupants ?? []);
-
-  const localOccupant = realtime.snapshot
-    ? renderedOccupants.find((occupant) => occupant.connectionId === realtime.snapshot?.self.connectionId) ?? realtime.snapshot.self
-    : null;
-  const remoteOccupants =
-    realtime.snapshot && localOccupant
-      ? deriveRemoteOccupants({
-          self: localOccupant,
-          occupants: renderedOccupants
-        })
-      : [];
 
   useEffect(() => {
     setActiveRoomSlug(roomSlug);
@@ -123,33 +115,33 @@ export function RoomView({
   }, [realtime.messages]);
   useEffect(() => {
     if (!realtime.snapshot) {
-      setRenderedOccupants([]);
+      setDisplayedLocalOccupant(null);
+      setDisplayedRemoteOccupants([]);
       return;
     }
 
-    setRenderedOccupants((current) => interpolateOccupantPositions(current, realtime.snapshot?.occupants ?? [], interpolationStep));
-  }, [realtime.snapshot]);
-  useEffect(() => {
-    if (!realtime.snapshot) return;
-
-    const interval = window.setInterval(() => {
-      setRenderedOccupants((current) => interpolateOccupantPositions(current, realtime.snapshot?.occupants ?? [], interpolationStep));
-    }, 16);
-
-    return () => window.clearInterval(interval);
+    const nextLocalOccupant =
+      realtime.snapshot.occupants.find((occupant) => occupant.connectionId === realtime.snapshot?.self.connectionId) ?? realtime.snapshot.self;
+    setDisplayedLocalOccupant(nextLocalOccupant);
+    setDisplayedRemoteOccupants(
+      deriveRemoteOccupants({
+        self: nextLocalOccupant,
+        occupants: realtime.snapshot.occupants
+      })
+    );
   }, [realtime.snapshot]);
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (!room || !localOccupant) return;
+      if (!room || !displayedLocalOccupant) return;
 
       const delta = keyboardDelta(event.key);
       if (!delta) return;
 
       realtimeClient.requestMovement({
-        roomSlug,
+        roomSlug: activeRoomSlug,
         destination: {
-          x: localOccupant.position.x + delta.x,
-          y: localOccupant.position.y + delta.y
+          x: displayedLocalOccupant.position.x + delta.x,
+          y: displayedLocalOccupant.position.y + delta.y
         },
         source: "keyboard"
       });
@@ -157,7 +149,7 @@ export function RoomView({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeRoomSlug, localOccupant, realtimeClient, room]);
+  }, [activeRoomSlug, displayedLocalOccupant, realtimeClient, room]);
 
   function handlePointerIntent(point: NormalizedRoomPoint) {
     if (!room) return;
@@ -173,6 +165,7 @@ export function RoomView({
   }
 
   function handleTeleport(targetRoom: string) {
+    setDirectoryOpen(false);
     realtimeClient.requestTeleport({
       roomSlug: activeRoomSlug,
       targetRoom
@@ -189,56 +182,64 @@ export function RoomView({
   }
 
   return (
-    <div className="room-layout">
-      <section aria-label="Room canvas" className="room-surface">
+    <>
+      <div className="room-layout">
+        <section aria-label="Room canvas" className="room-stage">
         {!room && !error ? <p>Loading room...</p> : null}
         {error ? <p>{error}</p> : null}
         {room ? (
           <>
-            <h2>{room.room.name}</h2>
-            <p>{`Theme: ${room.room.layout.theme}`}</p>
-            <p>{`Layout version: ${room.room.layoutVersion}`}</p>
-            <p>{`${room.room.layout.width} x ${room.room.layout.height}`}</p>
-            <p>{`Spawn points: ${room.room.layout.spawnPoints.length}`}</p>
-            <p>{`Collision rectangles: ${room.room.layout.collision.length}`}</p>
-            <p>{`Teleports: ${room.room.layout.teleports.map((teleport) => teleport.label).join(", ") || "None"}`}</p>
-            <p>{`Active occupants: ${realtime.snapshot?.occupants.length ?? 0}`}</p>
-            {room.room.layout.teleports.map((teleport) => (
-              <button key={teleport.targetRoom} onClick={() => handleTeleport(teleport.targetRoom)} type="button">
-                {`Teleport to ${teleport.label}`}
-              </button>
-            ))}
-            <PixiRoomCanvas
-              layout={room.room.layout}
-              localOccupant={localOccupant}
-              remoteOccupants={remoteOccupants}
-              onPointerIntent={handlePointerIntent}
-            />
+            <img alt="" className="room-stage__background" src={`/${room.room.layout.backgroundAsset.replace(/\.png$/u, ".svg")}`} />
+            <div className="room-stage__hud">
+              <h2>{room.room.name}</h2>
+            </div>
+            <button className="accent-button room-stage__directory-button" onClick={() => setDirectoryOpen(true)} type="button">
+              Room directory
+            </button>
+            <div className="room-stage__canvas-shell">
+              <PixiRoomCanvas
+                layout={room.room.layout}
+                localOccupant={displayedLocalOccupant}
+                remoteOccupants={displayedRemoteOccupants}
+                onPointerIntent={handlePointerIntent}
+              />
+            </div>
+            <div className="portal-strip">
+              {room.room.layout.teleports.map((teleport) => (
+                <button
+                  aria-label={`Teleport to ${teleport.label}`}
+                  className="portal-button"
+                  key={teleport.targetRoom}
+                  onClick={() => handleTeleport(teleport.targetRoom)}
+                  type="button"
+                >
+                  <strong>{teleport.label}</strong>
+                  <span>Teleport now</span>
+                </button>
+              ))}
+            </div>
           </>
         ) : null}
-        <p className="muted">Realtime: {realtime.status}</p>
-        {realtime.error ? <p>{realtime.error}</p> : null}
-      </section>
-      <section aria-label="Room chat" className="chat-panel">
-        <h2>Chat</h2>
-        <form onSubmit={handleChatSubmit}>
-          <label>
-            Message
-            <input value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} />
-          </label>
-          <button type="submit">Send</button>
-        </form>
-        {messages.length === 0 ? <p>No messages yet.</p> : null}
-        <ul>
-          {messages.map((message) => (
-            <li key={message.id}>
-              <strong>{message.userName}</strong>
-              {`: ${message.body}`}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+        <p className="room-stage__hint">Realtime: {realtime.status}</p>
+        {realtime.error ? <p className="form-message form-message-error">{realtime.error}</p> : null}
+        </section>
+        <RoomChatPanel
+          draft={chatDraft}
+          messages={messages}
+          onDraftChange={setChatDraft}
+          onSubmit={handleChatSubmit}
+          subtitle={`${room?.room.name ?? "Room"} chat`}
+          title="Room chat"
+        />
+      </div>
+      <RoomDirectory
+        apiClient={apiClient}
+        currentRoomSlug={activeRoomSlug}
+        isOpen={directoryOpen}
+        onClose={() => setDirectoryOpen(false)}
+        onSelectRoom={handleTeleport}
+      />
+    </>
   );
 }
 
