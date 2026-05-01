@@ -12,6 +12,7 @@ export class ApiError extends Error {
 
 export interface ApiClient {
   readonly baseUrl: string;
+  updateProfile(username: string): Promise<{ displayName: string; username: string }>;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
   listRooms(): Promise<RoomListResponse>;
   getRoom(roomSlug: string): Promise<RoomDetailResponse>;
@@ -21,6 +22,24 @@ export interface ApiClient {
 export function createApiClient(baseUrl = "/api"): ApiClient {
   return {
     baseUrl,
+    async updateProfile(username: string) {
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...csrfHeader()
+        },
+        body: JSON.stringify({ username })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to save username." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to save username.", response.status);
+      }
+
+      return (await response.json()) as { displayName: string; username: string };
+    },
     async redeemInvite(code: string) {
       const response = await fetch(`${baseUrl}/invites/redeem`, {
         method: "POST",

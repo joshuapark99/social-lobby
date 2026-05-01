@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { LoginView } from "../auth/LoginView";
 import { SessionBadge } from "../auth/SessionBadge";
+import { UsernameSetupView } from "../auth/UsernameSetupView";
 import {
   bootstrapSession as defaultBootstrapSession,
   type BootstrapSession,
@@ -48,6 +49,7 @@ export function App({
     })
   );
   const resolvedRoute = useMemo(() => routeForSession(route, session), [route, session]);
+  const immersiveShell = resolvedRoute.name === "lobby" || resolvedRoute.name === "room";
 
   function reportIssue(nextIssue: FrontendIssue) {
     setIssue(nextIssue);
@@ -57,6 +59,17 @@ export function App({
   useEffect(() => {
     setPathname(initialPathname);
   }, [initialPathname]);
+
+  useEffect(() => {
+    if (session.status !== "authenticated" || session.user.needsUsername) return;
+    if (route.name !== "welcome") return;
+
+    const correctedPathname = routePath(resolvedRoute);
+    if (pathname === correctedPathname) return;
+
+    window.history.replaceState({}, "", correctedPathname);
+    setPathname(correctedPathname);
+  }, [pathname, resolvedRoute, route.name, session]);
 
   useEffect(() => {
     let active = true;
@@ -80,26 +93,53 @@ export function App({
   }, [bootstrapSession]);
 
   return (
-    <main className="app-shell">
-      <header className="top-bar">
-        <div>
-          <p className="eyebrow">Social Lobby</p>
-          <h1>{routeTitle(resolvedRoute)}</h1>
-        </div>
-        <SessionBadge session={session} />
-      </header>
-      {issue ? <p role="alert">{formatIssue(issue)}</p> : null}
-      <section className="content-panel">
+    <main className={`app-shell${immersiveShell ? " app-shell-immersive" : ""}`}>
+      {immersiveShell ? (
+        <header className="top-bar top-bar-immersive">
+          <div>
+            <p className="eyebrow">Social Lobby</p>
+            <h1>{routeTitle(resolvedRoute, session)}</h1>
+          </div>
+          <SessionBadge session={session} />
+        </header>
+      ) : (
+        <header className="top-bar">
+          <div>
+            <p className="eyebrow">Social Lobby</p>
+            <h1>{routeTitle(resolvedRoute, session)}</h1>
+          </div>
+          <SessionBadge session={session} />
+        </header>
+      )}
+      {issue ? <p className={`app-alert${immersiveShell ? " app-alert-immersive" : ""}`} role="alert">{formatIssue(issue)}</p> : null}
+      <section className={`content-panel${immersiveShell ? " content-panel-immersive" : ""}`}>
         <RouteView
           apiClient={apiClient}
           onNavigate={setPathname}
           realtimeClient={resolvedRealtimeClient}
           route={resolvedRoute}
+          session={session}
+          setSession={setSession}
           reportIssue={reportIssue}
         />
       </section>
     </main>
   );
+}
+
+function routePath(route: AppRoute): string {
+  switch (route.name) {
+    case "welcome":
+      return "/welcome";
+    case "invite":
+      return route.code ? `/invite/${encodeURIComponent(route.code)}` : "/invite";
+    case "lobby":
+      return "/lobby";
+    case "room":
+      return `/rooms/${encodeURIComponent(route.roomId)}`;
+    case "not-found":
+      return "/missing";
+  }
 }
 
 function resolveRealtimeBaseUrl(apiBaseUrl: string): string {
@@ -123,10 +163,10 @@ function formatIssue(issue: FrontendIssue): string {
   }
 }
 
-function routeTitle(route: AppRoute) {
+function routeTitle(route: AppRoute, session: SessionState) {
   switch (route.name) {
     case "welcome":
-      return "Welcome";
+      return session.status === "authenticated" && session.user.needsUsername ? "Choose your username" : "Welcome";
     case "invite":
       return "Redeem invite";
     case "lobby":
@@ -139,8 +179,12 @@ function routeTitle(route: AppRoute) {
 }
 
 function routeForSession(route: AppRoute, session: SessionState): AppRoute {
-  if ((session.status === "loading" || session.status === "anonymous") && (route.name === "lobby" || route.name === "room")) {
+  if (session.status !== "authenticated" && (route.name === "lobby" || route.name === "room")) {
     return { name: "welcome" };
+  }
+
+  if (session.status === "authenticated" && !session.user.needsUsername && route.name === "welcome") {
+    return { name: "lobby" };
   }
 
   return route;
@@ -152,20 +196,47 @@ function RouteView({
   reportIssue,
   realtimeClient,
   route,
+  session,
+  setSession,
 }: {
   apiClient: ApiClient;
   onNavigate: (pathname: string) => void;
   realtimeClient: RealtimeClient;
   route: AppRoute;
+  session: SessionState;
+  setSession: (session: SessionState) => void;
   reportIssue: (issue: FrontendIssue) => void;
 }) {
+  if (session.status === "authenticated" && session.user.needsUsername) {
+    return (
+      <UsernameSetupView
+        apiClient={apiClient}
+        onComplete={(profile) => {
+          setSession({
+            status: "authenticated",
+            user: {
+              ...session.user,
+              displayName: profile.displayName,
+              username: profile.username,
+              needsUsername: false
+            }
+          });
+          const pathname = "/lobby";
+          window.history.pushState({}, "", pathname);
+          onNavigate(pathname);
+        }}
+        session={session}
+      />
+    );
+  }
+
   switch (route.name) {
     case "welcome":
       return <LoginView />;
     case "invite":
       return <InviteGate apiClient={apiClient} initialCode={route.code} />;
     case "lobby":
-      return <LobbyView apiClient={apiClient} onNavigate={onNavigate} />;
+      return <LobbyView apiClient={apiClient} onNavigate={onNavigate} session={session as Extract<SessionState, { status: "authenticated" }>} />;
     case "room":
       return (
         <RoomView

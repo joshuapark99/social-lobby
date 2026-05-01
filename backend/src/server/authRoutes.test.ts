@@ -15,6 +15,10 @@ function fakeAuthService(overrides: Partial<AuthService> = {}): AuthService {
       sessionToken: "session-token",
       csrfToken: "csrf-token"
     })),
+    updateProfile: vi.fn(async ({ username }: { username: string }) => ({
+      username,
+      displayName: username
+    })),
     session: vi.fn(async (): Promise<OidcIdentity | null> => null),
     logout: vi.fn(async () => undefined),
     ...overrides
@@ -113,7 +117,13 @@ describe("auth routes", () => {
 
   test("GET /auth/session returns the current identity from the session cookie", async () => {
     const auth = fakeAuthService({
-      session: vi.fn(async () => ({ provider: "google", subject: "subject", email: "person@example.com" }))
+      session: vi.fn(async () => ({
+        provider: "google",
+        subject: "subject",
+        email: "person@example.com",
+        name: "June",
+        username: "June"
+      }))
     });
     const server = buildServer({ config: loadConfig({}), authService: auth });
 
@@ -124,8 +134,44 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ email: "person@example.com" });
+    expect(response.json()).toEqual({
+      email: "person@example.com",
+      displayName: "June",
+      username: "June",
+      needsUsername: false
+    });
     expect(auth.session).toHaveBeenCalledWith("session-token");
+  });
+
+  test("PUT /auth/profile updates the signed-in username", async () => {
+    const auth = fakeAuthService({
+      session: vi.fn(async () => ({
+        userId: "user-1",
+        provider: "google",
+        subject: "subject",
+        email: "person@example.com"
+      }))
+    });
+    const server = buildServer({ config: loadConfig({}), authService: auth });
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "api/auth/profile",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { username: "June" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      displayName: "June",
+      username: "June",
+      needsUsername: false
+    });
+    expect(auth.updateProfile).toHaveBeenCalledWith({
+      userId: "user-1",
+      username: "June"
+    });
   });
 
   test("POST /auth/logout requires CSRF and clears session cookies", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { createAuthService, type AuthStore } from "./service.js";
+import { createAuthService, normalizeUsername, type AuthStore } from "./service.js";
 import type { OidcIdentity } from "./oidc.js";
 
 describe("createAuthService", () => {
@@ -13,6 +13,7 @@ describe("createAuthService", () => {
       findOrCreateUserByIdentity: vi.fn(async () => "user-1"),
       createSession: vi.fn(async () => undefined),
       findIdentityBySessionHash: vi.fn(async () => identity),
+      updateProfile: vi.fn(async ({ username }) => ({ username, displayName: username })),
       revokeSession: vi.fn(async () => undefined)
     };
     const service = createAuthService({
@@ -33,5 +34,31 @@ describe("createAuthService", () => {
     expect(callback.sessionToken).not.toEqual(callback.csrfToken);
     expect(session).toEqual(identity);
     expect(store.revokeSession).toHaveBeenCalledWith(expect.stringMatching(/^[a-f0-9]{64}$/));
+  });
+
+  test("normalizes and validates usernames before updating profile", async () => {
+    const provider = {
+      authorizationUrl: vi.fn(),
+      exchange: vi.fn()
+    };
+    const store: AuthStore = {
+      findOrCreateUserByIdentity: vi.fn(),
+      createSession: vi.fn(),
+      findIdentityBySessionHash: vi.fn(),
+      updateProfile: vi.fn(async ({ username }) => ({ username, displayName: username })),
+      revokeSession: vi.fn()
+    };
+    const service = createAuthService({ provider, store });
+
+    await expect(service.updateProfile({ userId: "user-1", username: "  June_Park  " })).resolves.toEqual({
+      username: "June_Park",
+      displayName: "June_Park"
+    });
+    expect(store.updateProfile).toHaveBeenCalledWith({
+      userId: "user-1",
+      username: "June_Park",
+      displayName: "June_Park"
+    });
+    expect(() => normalizeUsername("no")).toThrow("username must be 3-24 characters using letters, numbers, or underscores");
   });
 });

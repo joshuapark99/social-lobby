@@ -1,7 +1,7 @@
 export type SessionState =
   | { status: "loading" }
   | { status: "anonymous" }
-  | { status: "authenticated"; user: { displayName: string } }
+  | { status: "authenticated"; user: { displayName: string; email: string; username: string | null; needsUsername: boolean } }
   | { status: "error"; message: string };
 
 export type BootstrapSession = () => Promise<SessionState>;
@@ -12,10 +12,20 @@ export async function bootstrapSession(): Promise<SessionState> {
   });
 
   if (response.ok) {
-    const body = (await response.json()) as { email?: string };
+    const body = (await response.json()) as {
+      email?: string;
+      displayName?: string;
+      username?: string | null;
+      needsUsername?: boolean;
+    };
     return {
       status: "authenticated",
-      user: { displayName: body.email ?? "Signed-in user" }
+      user: {
+        displayName: body.displayName ?? body.email ?? "Signed-in user",
+        email: body.email ?? "",
+        username: body.username ?? null,
+        needsUsername: body.needsUsername ?? !body.username
+      }
     };
   }
 
