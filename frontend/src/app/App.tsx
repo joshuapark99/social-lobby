@@ -94,15 +94,7 @@ export function App({
 
   return (
     <main className={`app-shell${immersiveShell ? " app-shell-immersive" : ""}`}>
-      {immersiveShell ? (
-        <header className="top-bar top-bar-immersive">
-          <div>
-            <p className="eyebrow">Social Lobby</p>
-            <h1>{routeTitle(resolvedRoute, session)}</h1>
-          </div>
-          <SessionBadge session={session} />
-        </header>
-      ) : (
+      {immersiveShell ? null : (
         <header className="top-bar">
           <div>
             <p className="eyebrow">Social Lobby</p>
@@ -136,7 +128,7 @@ function routePath(route: AppRoute): string {
     case "lobby":
       return "/lobby";
     case "room":
-      return `/rooms/${encodeURIComponent(route.roomId)}`;
+      return route.communityId ? `/community/${encodeURIComponent(route.communityId)}/rooms/${encodeURIComponent(route.roomId)}` : `/rooms/${encodeURIComponent(route.roomId)}`;
     case "not-found":
       return "/missing";
   }
@@ -172,7 +164,7 @@ function routeTitle(route: AppRoute, session: SessionState) {
     case "lobby":
       return "Lobby";
     case "room":
-      return `Room: ${route.roomId}`;
+      return route.communityId ? `${route.communityId} / ${route.roomId}` : `Room: ${route.roomId}`;
     case "not-found":
       return "Not found";
   }
@@ -244,6 +236,7 @@ function RouteView({
           onNavigate={onNavigate}
           onOperationalIssue={reportIssue}
           realtimeClient={realtimeClient}
+          communitySlug={route.communityId}
           roomSlug={route.roomId}
         />
       );

@@ -5,6 +5,7 @@ export const personalRoomSlug = "personal-suite";
 export function personalRoomFor(displayName: string): RoomDetailResponse {
   return {
     community: {
+      id: "private-hub",
       slug: "private-hub",
       name: "Private Hub"
     },
@@ -40,7 +41,7 @@ export function personalRoomMessages(displayName: string): RoomChatMessage[] {
       roomSlug: personalRoomSlug,
       userId: "suite-guide",
       userName: "House Guide",
-      body: `Welcome in, ${displayName}. Open the transit console when you want to visit a shared room.`,
+      body: `Welcome in, ${displayName}. Use the community menu when you want to visit a shared room.`,
       createdAt: "2026-04-30T12:00:00.000Z"
     },
     {

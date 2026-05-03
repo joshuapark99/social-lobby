@@ -21,14 +21,20 @@ export interface RoomMetadata {
 
 export interface RoomListResponse {
   community: {
+    id: string;
     slug: string;
     name: string;
   };
   rooms: RoomMetadata[];
 }
 
+export interface CommunityRoomsResponse {
+  communities: RoomListResponse[];
+}
+
 export interface RoomDetailResponse {
   community: {
+    id: string;
     slug: string;
     name: string;
   };

@@ -19,7 +19,7 @@ function authService(userId = "user-1", email = "person@example.com"): AuthServi
 function roomService(overrides: Partial<RoomService> = {}): RoomService {
   return {
     listDefaultCommunityRooms: vi.fn(async (_userId: string) => ({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       rooms: [
         {
           slug: "main-lobby",
@@ -41,10 +41,141 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
         }
       ]
     })),
+    listUserCommunities: vi.fn(async (_userId: string) => ({
+      communities: [
+        {
+          community: { id: "community-1", slug: "default-community", name: "Default Community" },
+          rooms: [
+            {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+              }
+            }
+          ]
+        }
+      ]
+    })),
+    listCommunityRooms: vi.fn(async (communitySlug: string, _userId: string) =>
+      communitySlug === "default-community"
+        ? {
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
+            rooms: [
+              {
+                slug: "main-lobby",
+                name: "Main Lobby",
+                kind: "permanent",
+                isDefault: true,
+                layoutVersion: 1,
+                layout: {
+                  theme: "cozy-lobby",
+                  backgroundAsset: "rooms/main-lobby.png",
+                  avatarStyleSet: "soft-rounded",
+                  objectPack: "lobby-furniture-v1",
+                  width: 2400,
+                  height: 1600,
+                  spawnPoints: [{ x: 320, y: 420 }],
+                  collision: [],
+                  teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+                }
+              }
+            ]
+          }
+        : null
+    ),
+    listCommunityRoomsById: vi.fn(async (communityId: string, _userId: string) =>
+      communityId === "community-1"
+        ? {
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
+            rooms: [
+              {
+                slug: "main-lobby",
+                name: "Main Lobby",
+                kind: "permanent",
+                isDefault: true,
+                layoutVersion: 1,
+                layout: {
+                  theme: "cozy-lobby",
+                  backgroundAsset: "rooms/main-lobby.png",
+                  avatarStyleSet: "soft-rounded",
+                  objectPack: "lobby-furniture-v1",
+                  width: 2400,
+                  height: 1600,
+                  spawnPoints: [{ x: 320, y: 420 }],
+                  collision: [],
+                  teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+                }
+              }
+            ]
+          }
+        : null
+    ),
     roomBySlug: vi.fn(async (roomSlug: string, _userId: string) =>
       roomSlug === "main-lobby"
         ? {
-            community: { slug: "default-community", name: "Default Community" },
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
+            room: {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+              }
+            }
+          }
+        : null
+    ),
+    roomByCommunitySlug: vi.fn(async (communitySlug: string, roomSlug: string, _userId: string) =>
+      communitySlug === "default-community" && roomSlug === "main-lobby"
+        ? {
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
+            room: {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+              }
+            }
+          }
+        : null
+    ),
+    roomByCommunityId: vi.fn(async (communityId: string, roomSlug: string, _userId: string) =>
+      communityId === "community-1" && roomSlug === "main-lobby"
+        ? {
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
             room: {
               slug: "main-lobby",
               name: "Main Lobby",
@@ -114,7 +245,7 @@ describe("room routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       rooms: [
         expect.objectContaining({
           slug: "main-lobby",
@@ -123,6 +254,64 @@ describe("room routes", () => {
       ]
     });
     expect(rooms.listDefaultCommunityRooms).toHaveBeenCalledWith("user-1");
+  });
+
+  test("GET /communities returns joined communities and rooms for authenticated users", async () => {
+    const rooms = roomService();
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/communities",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      communities: [
+        {
+          community: { id: "community-1", slug: "default-community", name: "Default Community" },
+          rooms: [expect.objectContaining({ slug: "main-lobby" })]
+        }
+      ]
+    });
+    expect(rooms.listUserCommunities).toHaveBeenCalledWith("user-1");
+  });
+
+  test("GET /communities/:communitySlug/rooms/:roomSlug returns community-scoped room detail", async () => {
+    const rooms = roomService();
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/communities/default-community/rooms/main-lobby",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
+      room: expect.objectContaining({ slug: "main-lobby" })
+    });
+    expect(rooms.roomByCommunitySlug).toHaveBeenCalledWith("default-community", "main-lobby", "user-1");
+  });
+
+  test("GET /community/:communityId/rooms/:roomSlug returns id-scoped room detail", async () => {
+    const rooms = roomService();
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/community/community-1/rooms/main-lobby",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
+      room: expect.objectContaining({ slug: "main-lobby" })
+    });
+    expect(rooms.roomByCommunityId).toHaveBeenCalledWith("community-1", "main-lobby", "user-1");
   });
 
   test("GET /rooms/:roomSlug returns room detail for authenticated users", async () => {
@@ -137,7 +326,7 @@ describe("room routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       room: expect.objectContaining({
         slug: "main-lobby",
         layoutVersion: 1

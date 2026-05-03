@@ -12,36 +12,43 @@ test("blocks anonymous room entry behind the welcome screen", async ({ page }) =
 test("supports room switching, movement requests, and chat fanout for authenticated users", async ({ page }) => {
   await installAppHarness(page, { session: "authenticated" });
 
-  await page.goto("/rooms/main-lobby");
+  await page.goto("/community/default-community/rooms/main-lobby");
 
-  await expect(page.getByRole("heading", { name: "Room: main-lobby" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Main Lobby" })).toBeVisible();
-  await expect(page.getByText("Signed in as June")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Main Lobby", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Communities and rooms" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Main Lobby" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rooftop" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add community" })).toBeVisible();
 
   await page.keyboard.press("ArrowRight");
   await expect.poll(async () => {
     return page.evaluate(() => window.__SOCIAL_LOBBY_SMOKE_STATE__.movementRequests.length);
   }).toBe(1);
 
-  await page.getByRole("button", { name: "Teleport to Rooftop" }).click();
-  await expect(page.getByRole("heading", { name: "Room: rooftop" })).toBeVisible();
+  await page.getByRole("button", { name: "Rooftop" }).click();
+  await expect(page).toHaveURL(/\/community\/default-community\/rooms\/rooftop$/u);
   await expect(page.getByRole("heading", { name: "Rooftop", exact: true })).toBeVisible();
 
   await page.getByLabel("Message").fill("Hello room");
   await page.getByRole("button", { name: "Send" }).click();
 
-  await expect(page.getByText("June: Hello room")).toBeVisible();
-  await expect(page.getByText("Guide: Echo: Hello room")).toBeVisible();
+  await expect(page.getByText("June")).toBeVisible();
+  await expect(page.getByText("Hello room", { exact: true })).toBeVisible();
+  await expect(page.getByText("Guide")).toBeVisible();
+  await expect(page.getByText("Echo: Hello room")).toBeVisible();
   await expect.poll(async () => {
     return page.evaluate(() => window.__SOCIAL_LOBBY_SMOKE_STATE__.chatRequests.length);
   }).toBe(1);
+
+  await page.getByRole("button", { name: "Add community" }).click();
+  await expect(page.getByLabel("Invite code")).toBeVisible();
 });
 
 async function installAppHarness(page: Parameters<typeof test>[0]["page"], options: { session: "anonymous" | "authenticated" }) {
   await page.addInitScript(({ session }) => {
     const rooms = {
       "main-lobby": {
-        community: { slug: "default-community", name: "Default Community" },
+        community: { id: "community-1", slug: "default-community", name: "Default Community" },
         room: {
           slug: "main-lobby",
           name: "Main Lobby",
@@ -62,7 +69,7 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
         }
       },
       rooftop: {
-        community: { slug: "default-community", name: "Default Community" },
+        community: { id: "community-1", slug: "default-community", name: "Default Community" },
         room: {
           slug: "rooftop",
           name: "Rooftop",
@@ -110,8 +117,16 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
         baseUrl: "/api",
         updateProfile: async () => ({ displayName: "June", username: "June" }),
         redeemInvite: async () => ({ status: "redeemed", communityId: "community-1" }),
+        listCommunities: async () => ({
+          communities: [
+            {
+              community: { id: "community-1", slug: "default-community", name: "Default Community" },
+              rooms: [rooms["main-lobby"].room, rooms.rooftop.room]
+            }
+          ]
+        }),
         listRooms: async () => ({
-          community: { slug: "default-community", name: "Default Community" },
+          community: { id: "community-1", slug: "default-community", name: "Default Community" },
           rooms: [rooms["main-lobby"].room, rooms.rooftop.room]
         }),
         getRoom: async (roomSlug) => {

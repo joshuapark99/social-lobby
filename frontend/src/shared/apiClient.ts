@@ -1,4 +1,4 @@
-import type { RoomChatHistoryResponse, RoomDetailResponse, RoomListResponse } from "../rooms/api";
+import type { CommunityRoomsResponse, RoomChatHistoryResponse, RoomDetailResponse, RoomListResponse } from "../rooms/api";
 
 export class ApiError extends Error {
   constructor(
@@ -14,8 +14,10 @@ export interface ApiClient {
   readonly baseUrl: string;
   updateProfile(username: string): Promise<{ displayName: string; username: string }>;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
+  listCommunities(): Promise<CommunityRoomsResponse>;
   listRooms(): Promise<RoomListResponse>;
-  getRoom(roomSlug: string): Promise<RoomDetailResponse>;
+  listCommunityRooms(communitySlug: string): Promise<RoomListResponse>;
+  getRoom(roomSlug: string, communitySlug?: string): Promise<RoomDetailResponse>;
   listRoomMessages(roomSlug: string): Promise<RoomChatHistoryResponse>;
 }
 
@@ -60,6 +62,18 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
 
       return (await response.json()) as { status: "redeemed" | "already-member"; communityId: string };
     },
+    async listCommunities() {
+      const response = await fetch(`${baseUrl}/communities`, {
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to load communities." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to load communities.", response.status);
+      }
+
+      return (await response.json()) as CommunityRoomsResponse;
+    },
     async listRooms() {
       const response = await fetch(`${baseUrl}/communities/default/rooms`, {
         credentials: "include"
@@ -72,8 +86,23 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
 
       return (await response.json()) as RoomListResponse;
     },
-    async getRoom(roomSlug: string) {
-      const response = await fetch(`${baseUrl}/rooms/${encodeURIComponent(roomSlug)}`, {
+    async listCommunityRooms(communitySlug: string) {
+      const response = await fetch(`${baseUrl}/communities/${encodeURIComponent(communitySlug)}/rooms`, {
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to load rooms." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to load rooms.", response.status);
+      }
+
+      return (await response.json()) as RoomListResponse;
+    },
+    async getRoom(roomSlug: string, communitySlug?: string) {
+      const roomPath = communitySlug
+        ? `${baseUrl}/communities/${encodeURIComponent(communitySlug)}/rooms/${encodeURIComponent(roomSlug)}`
+        : `${baseUrl}/rooms/${encodeURIComponent(roomSlug)}`;
+      const response = await fetch(roomPath, {
         credentials: "include"
       });
 

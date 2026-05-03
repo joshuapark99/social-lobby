@@ -14,6 +14,11 @@ describe("parseRoute", () => {
       name: "room",
       roomId: "main-hall",
     });
+    expect(parseRoute("/community/default-community/rooms/main-hall")).toEqual({
+      name: "room",
+      communityId: "default-community",
+      roomId: "main-hall",
+    });
   });
 
   it("normalizes the root route to welcome", () => {

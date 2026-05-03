@@ -22,6 +22,95 @@ export function registerRoomRoutes(
     }
   });
 
+  server.get("/api/communities", async (request, reply) => {
+    const identity = await requireIdentity(request, reply, options.authService);
+    if (!identity) return reply;
+
+    try {
+      return reply.status(200).send(await options.roomService.listUserCommunities(identity.userId));
+    } catch (error) {
+      return reply.status(500).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.get<{ Params: { communitySlug: string } }>("/api/communities/:communitySlug/rooms", async (request, reply) => {
+    const identity = await requireIdentity(request, reply, options.authService);
+    if (!identity) return reply;
+
+    try {
+      const rooms = await options.roomService.listCommunityRooms(request.params.communitySlug, identity.userId);
+      if (!rooms) return reply.status(404).send({ error: "community not found" });
+      return reply.status(200).send(rooms);
+    } catch (error) {
+      if (isRoomAccessError(error)) {
+        return reply.status(403).send({ error: error.message });
+      }
+      return reply.status(500).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.get<{ Params: { communityId: string } }>("/api/community/:communityId/rooms", async (request, reply) => {
+    const identity = await requireIdentity(request, reply, options.authService);
+    if (!identity) return reply;
+
+    try {
+      const rooms = await options.roomService.listCommunityRoomsById(request.params.communityId, identity.userId);
+      if (!rooms) return reply.status(404).send({ error: "community not found" });
+      return reply.status(200).send(rooms);
+    } catch (error) {
+      if (isRoomAccessError(error)) {
+        return reply.status(403).send({ error: error.message });
+      }
+      return reply.status(500).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.get<{ Params: { communitySlug: string; roomSlug: string } }>(
+    "/api/communities/:communitySlug/rooms/:roomSlug",
+    async (request, reply) => {
+      const identity = await requireIdentity(request, reply, options.authService);
+      if (!identity) return reply;
+
+      try {
+        const room = await options.roomService.roomByCommunitySlug(
+          request.params.communitySlug,
+          request.params.roomSlug,
+          identity.userId
+        );
+        if (!room) return reply.status(404).send({ error: "room not found" });
+        return reply.status(200).send(room);
+      } catch (error) {
+        if (isRoomAccessError(error)) {
+          return reply.status(403).send({ error: error.message });
+        }
+        return reply.status(500).send({ error: errorMessage(error) });
+      }
+    }
+  );
+
+  server.get<{ Params: { communityId: string; roomSlug: string } }>(
+    "/api/community/:communityId/rooms/:roomSlug",
+    async (request, reply) => {
+      const identity = await requireIdentity(request, reply, options.authService);
+      if (!identity) return reply;
+
+      try {
+        const room = await options.roomService.roomByCommunityId(
+          request.params.communityId,
+          request.params.roomSlug,
+          identity.userId
+        );
+        if (!room) return reply.status(404).send({ error: "room not found" });
+        return reply.status(200).send(room);
+      } catch (error) {
+        if (isRoomAccessError(error)) {
+          return reply.status(403).send({ error: error.message });
+        }
+        return reply.status(500).send({ error: errorMessage(error) });
+      }
+    }
+  );
+
   server.get<{ Params: { roomSlug: string } }>("/api/rooms/:roomSlug", async (request, reply) => {
     const identity = await requireIdentity(request, reply, options.authService);
     if (!identity) return reply;

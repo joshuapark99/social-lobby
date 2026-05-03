@@ -10,9 +10,37 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     baseUrl: "/api",
     updateProfile: vi.fn(),
     redeemInvite: vi.fn(),
+    listCommunities: vi.fn(async () => ({
+      communities: [
+        {
+          community: { id: "community-1", slug: "default-community", name: "Default Community" },
+          rooms: [
+            {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+              }
+            }
+          ]
+        }
+      ]
+    })),
     listRooms: vi.fn(),
+    listCommunityRooms: vi.fn(),
     getRoom: vi.fn(async () => ({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       room: {
         slug: "main-lobby",
         name: "Main Lobby",
@@ -76,7 +104,7 @@ describe("RoomView", () => {
 
     expect(screen.getByText("Loading room...")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Teleport to Rooftop" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Communities and rooms" })).toBeInTheDocument();
   });
 
   it("renders an error state when room metadata loading fails", async () => {
@@ -227,7 +255,7 @@ describe("RoomView", () => {
     });
   });
 
-  it("renders teleport controls and sends teleport requests for the selected destination", async () => {
+  it("routes through the community navigation instead of sending teleport requests", async () => {
     const client = realtimeClient({
       status: "connected",
       snapshot: {
@@ -251,20 +279,20 @@ describe("RoomView", () => {
 
     render(<RoomView apiClient={apiClient()} realtimeClient={client} roomSlug="main-lobby" />);
 
-    const button = await screen.findByRole("button", { name: "Teleport to Rooftop" });
+    const button = await screen.findByRole("button", { name: /Main Lobby/u });
     fireEvent.click(button);
 
-    expect(client.requestTeleport).toHaveBeenCalledWith({
-      roomSlug: "main-lobby",
-      targetRoom: "rooftop"
-    });
+    expect(client.requestTeleport).not.toHaveBeenCalled();
   });
 
   it("renders recent room chat history after the room loads", async () => {
     render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
 
-    expect(await screen.findByText((_, element) => element?.textContent === "Person Example: Hello room")).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === "Other Person: Welcome back")).toBeInTheDocument();
+    expect(await screen.findByText("Person Example")).toBeInTheDocument();
+    expect(screen.getByText("Hello room")).toBeInTheDocument();
+    expect(screen.getByText("Other Person")).toBeInTheDocument();
+    expect(screen.getByText("Welcome back")).toBeInTheDocument();
+    expect(screen.getAllByText(/\d{1,2}:\d{2}/u).length).toBeGreaterThan(0);
   });
 
   it("appends realtime chat messages from current room state", async () => {
@@ -307,6 +335,7 @@ describe("RoomView", () => {
       />
     );
 
-    expect(await screen.findByRole("listitem")).toHaveTextContent("Other Person: Realtime hello");
+    expect(await screen.findByRole("listitem")).toHaveTextContent("Other Person");
+    expect(screen.getByRole("listitem")).toHaveTextContent("Realtime hello");
   });
 });

@@ -43,8 +43,35 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
     baseUrl: "/api",
     updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
     redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+    listCommunities: vi.fn(async () => ({
+      communities: [
+        {
+          community: { id: "community-1", slug: "default-community", name: "Default Community" },
+          rooms: [
+            {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+              }
+            }
+          ]
+        }
+      ]
+    })),
     listRooms: vi.fn(async () => ({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       rooms: [
         {
           slug: "main-lobby",
@@ -66,8 +93,9 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
         },
       ],
     })),
+    listCommunityRooms: vi.fn(),
     getRoom: vi.fn(async () => ({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       room: {
         slug: "main-hall",
         name: "Main Hall",
@@ -119,7 +147,9 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
       redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+      listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
+      listCommunityRooms: vi.fn(),
       getRoom: vi.fn(),
       listRoomMessages: vi.fn(async () => ({ messages: [] }))
     };
@@ -141,20 +171,16 @@ describe("App", () => {
   it("renders the lobby route", async () => {
     renderApp("/lobby", authenticatedSession());
 
-    expect(await screen.findByRole("heading", { name: "Lobby" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "June's Room" })).toBeInTheDocument();
-    expect(screen.getByText("Open transit console")).toBeInTheDocument();
-    expect(screen.getByText("Signed in as June")).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Communities and rooms" })).toBeInTheDocument();
   });
 
   it("renders the room route with canvas and chat regions", async () => {
     renderApp("/rooms/main-hall", authenticatedSession());
 
-    expect(await screen.findByRole("heading", { name: "Room: main-hall" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Main Hall" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Room canvas" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Room chat" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Main Hall" })).toBeInTheDocument();
-    expect(screen.getByText("Signed in as June")).toBeInTheDocument();
   });
 
   it("renders session bootstrap loading then anonymous state", async () => {
@@ -186,7 +212,9 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
+      listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
+      listCommunityRooms: vi.fn(),
       getRoom: vi.fn(),
       listRoomMessages: vi.fn(async () => ({ messages: [] }))
     };
@@ -217,7 +245,9 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
+      listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
+      listCommunityRooms: vi.fn(),
       getRoom: vi.fn(async () => {
         throw new Error("Unable to load room.");
       }),
@@ -248,10 +278,12 @@ describe("App", () => {
           baseUrl: "/api",
           updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
           redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+          listCommunities: vi.fn(async () => ({ communities: [] })),
           listRooms: vi.fn(async () => ({
-            community: { slug: "default-community", name: "Default Community" },
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
             rooms: []
           })),
+          listCommunityRooms: vi.fn(),
           getRoom: vi.fn(async () => {
             throw new ApiError("room access denied", 403);
           }),
@@ -275,12 +307,14 @@ describe("App", () => {
           baseUrl: "/api",
           updateProfile: vi.fn(),
           redeemInvite: vi.fn(),
+          listCommunities: vi.fn(async () => ({ communities: [] })),
           listRooms: vi.fn(async () => ({
-            community: { slug: "default-community", name: "Default Community" },
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
             rooms: []
           })),
+          listCommunityRooms: vi.fn(),
           getRoom: vi.fn(async () => ({
-            community: { slug: "default-community", name: "Default Community" },
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
             room: {
               slug: "main-hall",
               name: "Main Hall",
@@ -326,7 +360,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Not found" })).toBeInTheDocument();
   });
 
-  it("updates the route title when realtime room navigation changes the active room", async () => {
+  it("keeps sidebar routing authoritative when realtime snapshots lag behind", async () => {
     const listeners: Array<(state: RealtimeClient["snapshot"] extends never ? never : any) => void> = [];
     const realtime = {
       ...realtimeClient(),
@@ -341,9 +375,11 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
+      listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
+      listCommunityRooms: vi.fn(),
       getRoom: vi.fn(async (roomSlug: string) => ({
-        community: { slug: "default-community", name: "Default Community" },
+        community: { id: "community-1", slug: "default-community", name: "Default Community" },
         room:
           roomSlug === "rooftop"
             ? {
@@ -395,7 +431,7 @@ describe("App", () => {
       />
     );
 
-    expect(await screen.findByRole("heading", { name: "Room: main-lobby" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
 
     await act(async () => {
       listeners[0]?.({
@@ -422,7 +458,7 @@ describe("App", () => {
       });
     });
 
-    expect(await screen.findByRole("heading", { name: "Room: rooftop" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Rooftop" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Main Lobby" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Rooftop" })).not.toBeInTheDocument();
   });
 });
