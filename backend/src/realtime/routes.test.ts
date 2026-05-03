@@ -211,7 +211,7 @@ describe("realtime room routes", () => {
     expect(event.payload?.userId).toBe("user-2");
   });
 
-  test("accepts movement requests and broadcasts the accepted destination", async () => {
+  test("room occupants see each other's locations in snapshots and movement updates", async () => {
     const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
     }));
@@ -225,8 +225,25 @@ describe("realtime room routes", () => {
     const secondSnapshotPromise = onceMessage(second);
     const joinedPromise = onceMessage(first);
     second.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug: "main-lobby" } }));
-    await secondSnapshotPromise;
+    const secondSnapshot = JSON.parse((await secondSnapshotPromise).toString()) as {
+      type: string;
+      payload?: { occupants?: Array<{ userId: string; position: { x: number; y: number } }> };
+    };
     await joinedPromise;
+
+    expect(secondSnapshot.type).toBe("room.snapshot");
+    expect(secondSnapshot.payload?.occupants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: "user-1",
+          position: { x: 320, y: 420 }
+        }),
+        expect.objectContaining({
+          userId: "user-2",
+          position: { x: 320, y: 420 }
+        })
+      ])
+    );
 
     const moverAcceptedPromise = onceMessage(first);
     const peerAcceptedPromise = onceMessage(second);
@@ -265,6 +282,45 @@ describe("realtime room routes", () => {
     expect(peerEvent.payload?.occupant).toMatchObject({
       userId: "user-1",
       position: { x: 640, y: 520 }
+    });
+
+    const secondMoverAcceptedPromise = onceMessage(second);
+    const firstPeerAcceptedPromise = onceMessage(first);
+
+    second.send(
+      JSON.stringify({
+        version: 1,
+        type: "move.request",
+        requestId: "move-2",
+        payload: {
+          roomSlug: "main-lobby",
+          destination: { x: 760, y: 600 },
+          source: "keyboard"
+        }
+      })
+    );
+
+    const secondMoverEvent = JSON.parse((await secondMoverAcceptedPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { occupant?: { userId: string; position: { x: number; y: number } } };
+    };
+    const firstPeerEvent = JSON.parse((await firstPeerAcceptedPromise).toString()) as {
+      type: string;
+      payload?: { occupant?: { userId: string; position: { x: number; y: number } } };
+    };
+
+    expect(secondMoverEvent.type).toBe("movement.accepted");
+    expect(secondMoverEvent.requestId).toBe("move-2");
+    expect(secondMoverEvent.payload?.occupant).toMatchObject({
+      userId: "user-2",
+      position: { x: 760, y: 600 }
+    });
+
+    expect(firstPeerEvent.type).toBe("movement.accepted");
+    expect(firstPeerEvent.payload?.occupant).toMatchObject({
+      userId: "user-2",
+      position: { x: 760, y: 600 }
     });
   });
 
@@ -370,7 +426,7 @@ describe("realtime room routes", () => {
     expect(event.payload?.code).toBe("invalid_event");
   });
 
-  test("persists chat.send and fans out chat.message to room occupants", async () => {
+  test("room occupants receive each other's chat messages", async () => {
     const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
     }));
@@ -426,6 +482,49 @@ describe("realtime room routes", () => {
       roomSlug: "main-lobby",
       userId: "user-1",
       body: "Hello room"
+    });
+
+    const secondSenderMessagePromise = onceMessage(second);
+    const firstPeerMessagePromise = onceMessage(first);
+    second.send(JSON.stringify({
+      version: 1,
+      type: "chat.send",
+      requestId: "chat-2",
+      payload: {
+        roomSlug: "main-lobby",
+        body: "Hello back"
+      }
+    }));
+
+    const secondSenderEvent = JSON.parse((await secondSenderMessagePromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { message?: { body: string; userId: string; userName: string } };
+    };
+    const firstPeerEvent = JSON.parse((await firstPeerMessagePromise).toString()) as {
+      type: string;
+      payload?: { message?: { body: string; userId: string; userName: string } };
+    };
+
+    expect(secondSenderEvent.type).toBe("chat.message");
+    expect(secondSenderEvent.requestId).toBe("chat-2");
+    expect(secondSenderEvent.payload?.message).toMatchObject({
+      body: "Hello back",
+      userId: "user-2",
+      userName: "Other Person"
+    });
+
+    expect(firstPeerEvent.type).toBe("chat.message");
+    expect(firstPeerEvent.payload?.message).toMatchObject({
+      body: "Hello back",
+      userId: "user-2",
+      userName: "Other Person"
+    });
+
+    expect(chat.createMessage).toHaveBeenCalledWith({
+      roomSlug: "main-lobby",
+      userId: "user-2",
+      body: "Hello back"
     });
   });
 
