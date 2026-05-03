@@ -27,6 +27,9 @@ export function RoomChatPanel({
         <ul>
           {messages.map((message) => (
             <li key={message.id}>
+              <time className="twitch-chat__timestamp" dateTime={message.createdAt}>
+                {formatMessageTime(message.createdAt)}
+              </time>
               <span className="twitch-chat__name">{message.userName}</span>
               <span className="twitch-chat__separator">: </span>
               <span className="twitch-chat__body">{message.body}</span>
@@ -43,4 +46,14 @@ export function RoomChatPanel({
       </form>
     </section>
   );
+}
+
+function formatMessageTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--:--";
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
 }

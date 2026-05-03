@@ -4,6 +4,11 @@ import { createRoomService, type RoomStore } from "./service.js";
 function roomStore(overrides: Partial<RoomStore> = {}): RoomStore {
   return {
     defaultCommunity: async () => ({ id: "community-1", slug: "default-community", name: "Default Community" }),
+    communitiesForUser: async () => [{ id: "community-1", slug: "default-community", name: "Default Community" }],
+    communityBySlug: async (communitySlug) =>
+      communitySlug === "default-community" ? { id: "community-1", slug: "default-community", name: "Default Community" } : null,
+    communityById: async (communityId) =>
+      communityId === "community-1" ? { id: "community-1", slug: "default-community", name: "Default Community" } : null,
     hasActiveMembership: async () => true,
     roomsForCommunity: async () => [
       {
@@ -76,6 +81,56 @@ function roomStore(overrides: Partial<RoomStore> = {}): RoomStore {
             }
           }
         : null,
+    roomByCommunitySlug: async (communitySlug, roomSlug) =>
+      communitySlug === "default-community" && roomSlug === "main-lobby"
+        ? {
+            id: "room-1",
+            communityId: "community-1",
+            communitySlug: "default-community",
+            communityName: "Default Community",
+            slug: "main-lobby",
+            name: "Main Lobby",
+            kind: "permanent",
+            isDefault: true,
+            layoutVersion: 1,
+            layoutJson: {
+              theme: "cozy-lobby",
+              backgroundAsset: "rooms/main-lobby.png",
+              avatarStyleSet: "soft-rounded",
+              objectPack: "lobby-furniture-v1",
+              width: 2400,
+              height: 1600,
+              spawnPoints: [{ x: 320, y: 420 }],
+              collision: [],
+              teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+            }
+          }
+        : null,
+    roomByCommunityId: async (communityId, roomSlug) =>
+      communityId === "community-1" && roomSlug === "main-lobby"
+        ? {
+            id: "room-1",
+            communityId: "community-1",
+            communitySlug: "default-community",
+            communityName: "Default Community",
+            slug: "main-lobby",
+            name: "Main Lobby",
+            kind: "permanent",
+            isDefault: true,
+            layoutVersion: 1,
+            layoutJson: {
+              theme: "cozy-lobby",
+              backgroundAsset: "rooms/main-lobby.png",
+              avatarStyleSet: "soft-rounded",
+              objectPack: "lobby-furniture-v1",
+              width: 2400,
+              height: 1600,
+              spawnPoints: [{ x: 320, y: 420 }],
+              collision: [],
+              teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+            }
+          }
+        : null,
     ...overrides
   };
 }
@@ -86,6 +141,7 @@ describe("room service", () => {
 
     await expect(service.listDefaultCommunityRooms("user-1")).resolves.toEqual({
       community: {
+        id: "community-1",
         slug: "default-community",
         name: "Default Community"
       },
@@ -111,6 +167,7 @@ describe("room service", () => {
 
     await expect(service.roomBySlug("main-lobby", "user-1")).resolves.toEqual({
       community: {
+        id: "community-1",
         slug: "default-community",
         name: "Default Community"
       },
@@ -121,6 +178,42 @@ describe("room service", () => {
         layout: expect.objectContaining({
           teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
         })
+      })
+    });
+  });
+
+  test("lists joined communities with all rooms for each active membership", async () => {
+    const service = createRoomService({ store: roomStore() });
+
+    await expect(service.listUserCommunities("user-1")).resolves.toEqual({
+      communities: [
+        {
+          community: {
+            id: "community-1",
+            slug: "default-community",
+            name: "Default Community"
+          },
+          rooms: [
+            expect.objectContaining({ slug: "main-lobby" }),
+            expect.objectContaining({ slug: "rooftop" })
+          ]
+        }
+      ]
+    });
+  });
+
+  test("returns community-scoped room detail", async () => {
+    const service = createRoomService({ store: roomStore() });
+
+    await expect(service.roomByCommunitySlug("default-community", "main-lobby", "user-1")).resolves.toEqual({
+      community: {
+        id: "community-1",
+        slug: "default-community",
+        name: "Default Community"
+      },
+      room: expect.objectContaining({
+        slug: "main-lobby",
+        name: "Main Lobby"
       })
     });
   });

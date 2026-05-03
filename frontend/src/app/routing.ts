@@ -2,7 +2,7 @@ export type AppRoute =
   | { name: "welcome" }
   | { name: "invite"; code: string }
   | { name: "lobby" }
-  | { name: "room"; roomId: string }
+  | { name: "room"; roomId: string; communityId?: string }
   | { name: "not-found" };
 
 export function parseRoute(pathname: string): AppRoute {
@@ -30,6 +30,14 @@ export function parseRoute(pathname: string): AppRoute {
 
   if (segments.length === 2 && segments[0] === "rooms") {
     return { name: "room", roomId: decodeURIComponent(segments[1]) };
+  }
+
+  if (segments.length === 4 && (segments[0] === "community" || segments[0] === "communities") && segments[2] === "rooms") {
+    return {
+      name: "room",
+      communityId: decodeURIComponent(segments[1]),
+      roomId: decodeURIComponent(segments[3])
+    };
   }
 
   return { name: "not-found" };

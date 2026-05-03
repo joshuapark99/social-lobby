@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { LobbyView } from "./LobbyView";
 import type { ApiClient } from "../shared/apiClient";
@@ -8,8 +8,35 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     baseUrl: "/api",
     updateProfile: vi.fn(),
     redeemInvite: vi.fn(),
+    listCommunities: vi.fn(async () => ({
+      communities: [
+        {
+          community: { id: "community-1", slug: "default-community", name: "Default Community" },
+          rooms: [
+            {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+              }
+            }
+          ]
+        }
+      ]
+    })),
     listRooms: vi.fn(async () => ({
-      community: { slug: "default-community", name: "Default Community" },
+      community: { id: "community-1", slug: "default-community", name: "Default Community" },
       rooms: [
         {
           slug: "main-lobby",
@@ -31,6 +58,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
         }
       ]
     })),
+    listCommunityRooms: vi.fn(),
     getRoom: vi.fn(),
     listRoomMessages: vi.fn(async () => ({ messages: [] })),
     ...overrides
@@ -52,17 +80,15 @@ describe("LobbyView", () => {
     render(<LobbyView apiClient={apiClient()} session={session} />);
 
     expect(screen.getByRole("heading", { name: "June's Room" })).toBeInTheDocument();
-    expect(screen.getByText("Open transit console")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Personal room feed" })).toBeInTheDocument();
-    expect(screen.getByText(/Open the transit console/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Use the community menu/i).length).toBeGreaterThan(0);
   });
 
-  it("opens the directory and loads rooms", async () => {
+  it("loads the persistent community navigation", async () => {
     render(<LobbyView apiClient={apiClient()} session={session} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open transit console" }));
-
-    expect(await screen.findByRole("heading", { name: "Pick your next room" })).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Communities and rooms" })).toBeInTheDocument();
+    expect(await screen.findByText("Default Community")).toBeInTheDocument();
     expect(await screen.findByText("Main Lobby")).toBeInTheDocument();
   });
 });

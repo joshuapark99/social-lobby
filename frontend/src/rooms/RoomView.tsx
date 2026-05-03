@@ -6,8 +6,8 @@ import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
 import { deriveRemoteOccupants } from "./pixiRoomCanvasState";
 import { PixiRoomCanvas } from "./PixiRoomCanvas";
 import type { RoomChatMessage, RoomDetailResponse } from "./api";
+import { CommunityNavigation } from "./CommunityNavigation";
 import { RoomChatPanel } from "./RoomChatPanel";
-import { RoomDirectory } from "./RoomDirectory";
 
 const keyboardStep = 80;
 
@@ -16,9 +16,11 @@ export function RoomView({
   onNavigate,
   onOperationalIssue,
   realtimeClient,
+  communitySlug,
   roomSlug,
 }: {
   apiClient: ApiClient;
+  communitySlug?: string;
   onNavigate?: (pathname: string) => void;
   onOperationalIssue?: (issue: FrontendIssue) => void;
   realtimeClient: RealtimeClient;
@@ -29,7 +31,6 @@ export function RoomView({
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
-  const [directoryOpen, setDirectoryOpen] = useState(false);
   const [displayedLocalOccupant, setDisplayedLocalOccupant] = useState<RealtimeOccupant | null>(null);
   const [displayedRemoteOccupants, setDisplayedRemoteOccupants] = useState<RealtimeOccupant[]>([]);
   const [realtime, setRealtime] = useState<RealtimeState>(() => ({
@@ -44,21 +45,12 @@ export function RoomView({
   }, [roomSlug]);
 
   useEffect(() => {
-    if (!realtime.snapshot?.room.slug || realtime.snapshot.room.slug === activeRoomSlug) return;
-
-    setActiveRoomSlug(realtime.snapshot.room.slug);
-    const pathname = `/rooms/${encodeURIComponent(realtime.snapshot.room.slug)}`;
-    window.history.pushState({}, "", pathname);
-    onNavigate?.(pathname);
-  }, [activeRoomSlug, onNavigate, realtime.snapshot?.room.slug]);
-
-  useEffect(() => {
     let active = true;
     setRoom(null);
     setMessages([]);
 
     apiClient
-      .getRoom(activeRoomSlug)
+      .getRoom(activeRoomSlug, communitySlug)
       .then((response) => {
         if (!active) return;
         setRoom(response);
@@ -95,7 +87,7 @@ export function RoomView({
     return () => {
       active = false;
     };
-  }, [activeRoomSlug, apiClient]);
+  }, [activeRoomSlug, apiClient, communitySlug, onNavigate, onOperationalIssue]);
 
   useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
   useEffect(() => {
@@ -164,14 +156,6 @@ export function RoomView({
     });
   }
 
-  function handleTeleport(targetRoom: string) {
-    setDirectoryOpen(false);
-    realtimeClient.requestTeleport({
-      roomSlug: activeRoomSlug,
-      targetRoom
-    });
-  }
-
   function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = chatDraft.trim();
@@ -182,7 +166,13 @@ export function RoomView({
   }
 
   return (
-    <>
+    <div className="social-room-app">
+      <CommunityNavigation
+        activeCommunitySlug={room?.community.slug ?? communitySlug}
+        activeRoomSlug={activeRoomSlug}
+        apiClient={apiClient}
+        onNavigate={onNavigate}
+      />
       <div className="room-layout">
         <section aria-label="Room canvas" className="room-stage">
         {!room && !error ? <p>Loading room...</p> : null}
@@ -193,9 +183,6 @@ export function RoomView({
             <div className="room-stage__hud">
               <h2>{room.room.name}</h2>
             </div>
-            <button className="accent-button room-stage__directory-button" onClick={() => setDirectoryOpen(true)} type="button">
-              Room directory
-            </button>
             <div className="room-stage__canvas-shell">
               <PixiRoomCanvas
                 layout={room.room.layout}
@@ -203,20 +190,6 @@ export function RoomView({
                 remoteOccupants={displayedRemoteOccupants}
                 onPointerIntent={handlePointerIntent}
               />
-            </div>
-            <div className="portal-strip">
-              {room.room.layout.teleports.map((teleport) => (
-                <button
-                  aria-label={`Teleport to ${teleport.label}`}
-                  className="portal-button"
-                  key={teleport.targetRoom}
-                  onClick={() => handleTeleport(teleport.targetRoom)}
-                  type="button"
-                >
-                  <strong>{teleport.label}</strong>
-                  <span>Teleport now</span>
-                </button>
-              ))}
             </div>
           </>
         ) : null}
@@ -232,14 +205,7 @@ export function RoomView({
           title="Room chat"
         />
       </div>
-      <RoomDirectory
-        apiClient={apiClient}
-        currentRoomSlug={activeRoomSlug}
-        isOpen={directoryOpen}
-        onClose={() => setDirectoryOpen(false)}
-        onSelectRoom={handleTeleport}
-      />
-    </>
+    </div>
   );
 }
 

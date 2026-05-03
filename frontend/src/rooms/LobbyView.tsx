@@ -1,8 +1,8 @@
 import { type FormEvent, useState } from "react";
 import type { ApiClient } from "../shared/apiClient";
 import type { SessionState } from "../auth/session";
+import { CommunityNavigation } from "./CommunityNavigation";
 import { RoomChatPanel } from "./RoomChatPanel";
-import { RoomDirectory } from "./RoomDirectory";
 import { personalRoomFor, personalRoomMessages } from "./personalRoom";
 
 export function LobbyView({
@@ -15,7 +15,6 @@ export function LobbyView({
   session: Extract<SessionState, { status: "authenticated" }>;
 }) {
   const room = personalRoomFor(session.user.username ?? session.user.displayName);
-  const [directoryOpen, setDirectoryOpen] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
   const [messages, setMessages] = useState(() => personalRoomMessages(session.user.username ?? session.user.displayName));
 
@@ -38,15 +37,9 @@ export function LobbyView({
     setChatDraft("");
   }
 
-  function handleNavigate(roomSlug: string) {
-    setDirectoryOpen(false);
-    const pathname = `/rooms/${encodeURIComponent(roomSlug)}`;
-    window.history.pushState({}, "", pathname);
-    onNavigate?.(pathname);
-  }
-
   return (
-    <>
+    <div className="social-room-app">
+      <CommunityNavigation apiClient={apiClient} onNavigate={onNavigate} />
       <div className="room-layout">
         <section aria-label="Room canvas" className="room-stage room-stage-personal">
           <img alt="" className="room-stage__background" src="/rooms/personal-suite.svg" />
@@ -54,11 +47,8 @@ export function LobbyView({
             <div>
               <p className="section-kicker">Personal room</p>
               <h2>{room.room.name}</h2>
-              <p className="section-copy">Your landing space. Open the console to jump into shared rooms or redeem a fresh invite code.</p>
+              <p className="section-copy">Your landing space. Use the community menu to enter shared rooms or redeem a fresh invite code.</p>
             </div>
-            <button className="accent-button" onClick={() => setDirectoryOpen(true)} type="button">
-              Open transit console
-            </button>
           </div>
           <div className="room-stage__avatar-card">
             <img alt="" src="/avatars/default-user.svg" />
@@ -67,10 +57,6 @@ export function LobbyView({
               <p>Spawned and ready</p>
             </div>
           </div>
-          <button className="room-stage__hotspot" onClick={() => setDirectoryOpen(true)} type="button">
-            <span>Transit Console</span>
-            <small>Click to browse rooms or redeem an invite</small>
-          </button>
         </section>
         <RoomChatPanel
           draft={chatDraft}
@@ -81,13 +67,6 @@ export function LobbyView({
           title="Room chat"
         />
       </div>
-      <RoomDirectory
-        apiClient={apiClient}
-        currentRoomSlug={room.room.slug}
-        isOpen={directoryOpen}
-        onClose={() => setDirectoryOpen(false)}
-        onSelectRoom={handleNavigate}
-      />
-    </>
+    </div>
   );
 }

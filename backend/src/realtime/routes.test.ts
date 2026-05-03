@@ -28,10 +28,15 @@ function authService(userId = "user-1", email = "person@example.com"): AuthServi
 function roomService(): RoomService {
   return {
     listDefaultCommunityRooms: vi.fn(),
+    listUserCommunities: vi.fn(),
+    listCommunityRooms: vi.fn(),
+    listCommunityRoomsById: vi.fn(),
+    roomByCommunitySlug: vi.fn(),
+    roomByCommunityId: vi.fn(),
     roomBySlug: vi.fn(async (roomSlug: string) =>
       roomSlug === "main-lobby"
         ? {
-            community: { slug: "default-community", name: "Default Community" },
+            community: { id: "community-1", slug: "default-community", name: "Default Community" },
             room: {
               slug: "main-lobby",
               name: "Main Lobby",
@@ -53,7 +58,7 @@ function roomService(): RoomService {
           }
         : roomSlug === "rooftop"
           ? {
-              community: { slug: "default-community", name: "Default Community" },
+              community: { id: "community-1", slug: "default-community", name: "Default Community" },
               room: {
                 slug: "rooftop",
                 name: "Rooftop",

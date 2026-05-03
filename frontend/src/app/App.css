@@ -214,9 +214,6 @@ h3 {
 .accent-button,
 .username-form button,
 .twitch-chat__input-row button,
-.portal-button,
-.room-card,
-.room-stage__hotspot,
 .ghost-button,
 .inline-form button {
   transition:
@@ -248,9 +245,6 @@ h3 {
 .accent-button:hover,
 .username-form button:hover,
 .twitch-chat__input-row button:hover,
-.portal-button:hover,
-.room-card:hover,
-.room-stage__hotspot:hover,
 .ghost-button:hover,
 .inline-form button:hover {
   transform: translateY(-2px);
@@ -344,9 +338,181 @@ h3 {
   color: #ffc6b8;
 }
 
-.room-layout {
+.social-room-app {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   min-height: 100vh;
-  position: relative;
+}
+
+.room-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  min-height: 100vh;
+}
+
+.community-nav {
+  background: rgba(17, 19, 24, 0.96);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f7f1e8;
+  display: grid;
+  grid-template-columns: 56px 276px;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  transition: grid-template-columns 180ms ease;
+  z-index: 16;
+}
+
+.community-nav-collapsed {
+  grid-template-columns: 56px 0;
+}
+
+.community-nav__rail {
+  align-items: center;
+  background: #15171c;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 10px;
+}
+
+.community-nav__toggle,
+.community-nav__add {
+  border: 0;
+  color: #fff7ea;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.community-nav__toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  height: 34px;
+  width: 44px;
+}
+
+.community-nav__add {
+  align-items: center;
+  background: rgba(91, 179, 126, 0.18);
+  border: 1px solid rgba(135, 232, 171, 0.32);
+  border-radius: 18px;
+  color: #9ff0bc;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  transition:
+    border-radius 180ms ease,
+    transform 180ms ease;
+  width: 48px;
+}
+
+.community-nav__add:hover {
+  border-radius: 14px;
+  transform: translateY(-1px);
+}
+
+.community-nav__add {
+  margin-top: auto;
+}
+
+.community-nav__add-active {
+  background: #87d99e;
+  color: #122016;
+}
+
+.community-nav__panel {
+  background:
+    linear-gradient(180deg, rgba(47, 52, 62, 0.98), rgba(31, 35, 43, 0.98)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 14px);
+  min-width: 0;
+  overflow: hidden auto;
+  padding: 22px 18px;
+}
+
+.community-nav-collapsed .community-nav__panel {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.community-nav__header h2 {
+  font-size: 1.2rem;
+  margin: 0 0 18px;
+  overflow-wrap: anywhere;
+}
+
+.community-nav__sections {
+  display: grid;
+  gap: 18px;
+}
+
+.community-nav__section p,
+.community-nav__invite label {
+  color: rgba(255, 247, 234, 0.58);
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.community-nav__room {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(255, 247, 234, 0.78);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  min-height: 34px;
+  padding: 7px 9px;
+  text-align: left;
+  width: 100%;
+}
+
+.community-nav__room span {
+  color: rgba(255, 247, 234, 0.36);
+  font-weight: 800;
+}
+
+.community-nav__room:hover,
+.community-nav__room-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff7ea;
+}
+
+.community-nav__invite {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 24px;
+  padding-top: 18px;
+}
+
+.community-nav__invite div {
+  display: grid;
+  gap: 8px;
+}
+
+.community-nav__invite input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #fff7ea;
+  font: inherit;
+  min-width: 0;
+  padding: 10px 11px;
+}
+
+.community-nav__invite button {
+  background: #87d99e;
+  border: 0;
+  border-radius: 8px;
+  color: #122016;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 12px;
 }
 
 .room-stage,
@@ -379,9 +545,7 @@ h3 {
 
 .room-stage__hud,
 .room-stage__avatar-card,
-.room-stage__hotspot,
 .room-stage__canvas-shell,
-.portal-strip,
 .room-stage__hint {
   position: relative;
   z-index: 1;
@@ -401,13 +565,6 @@ h3 {
 
 .room-stage__hud h2 {
   margin: 0;
-}
-
-.room-stage__directory-button {
-  position: absolute;
-  right: 24px;
-  top: 72px;
-  z-index: 2;
 }
 
 .room-stage__canvas-shell {
@@ -445,58 +602,6 @@ h3 {
   margin: 0;
 }
 
-.room-stage__hotspot {
-  align-items: flex-start;
-  background: rgba(255, 242, 224, 0.14);
-  border: 1px solid rgba(255, 214, 167, 0.38);
-  border-radius: 22px;
-  color: #fff4e1;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 18px 20px;
-  position: absolute;
-  right: 28px;
-  bottom: 142px;
-}
-
-.room-stage__hotspot small {
-  color: var(--copy-soft);
-}
-
-.portal-strip {
-  display: flex;
-  gap: 12px;
-  bottom: 16px;
-  left: 16px;
-  padding: 0;
-  position: absolute;
-}
-
-.portal-button,
-.room-card {
-  background: rgba(255, 240, 220, 0.12);
-  border: 1px solid var(--line-soft);
-  border-radius: 20px;
-  color: #fff6e7;
-  cursor: pointer;
-  display: flex;
-  gap: 12px;
-  padding: 14px 16px;
-  text-align: left;
-}
-
-.portal-button strong,
-.room-card__meta strong {
-  display: block;
-}
-
-.portal-button span,
-.room-card__meta span {
-  color: var(--copy-soft);
-}
-
 .room-stage__hint {
   color: var(--copy-soft);
   bottom: 86px;
@@ -524,11 +629,11 @@ h3 {
 
 .chat-panel {
   background: rgba(22, 14, 10, 0.64);
-  max-height: calc(100vh - 48px);
-  position: absolute;
-  right: 24px;
-  top: 24px;
-  width: min(360px, calc(100vw - 48px));
+  border-radius: 0;
+  border-width: 0 0 0 1px;
+  box-shadow: none;
+  max-height: 100vh;
+  width: 100%;
   z-index: 12;
 }
 
@@ -570,92 +675,21 @@ h3 {
   margin-right: 8px;
 }
 
+.twitch-chat__timestamp {
+  color: rgba(255, 247, 234, 0.48);
+  display: inline-block;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  margin-right: 10px;
+  min-width: 58px;
+}
+
 .twitch-chat__body {
   color: #fff7eb;
 }
 
 .twitch-chat__separator {
   color: var(--copy-soft);
-}
-
-.room-directory {
-  inset: 0;
-  pointer-events: none;
-  position: fixed;
-  z-index: 20;
-}
-
-.room-directory-open {
-  pointer-events: auto;
-}
-
-.room-directory__scrim {
-  background: rgba(8, 5, 4, 0.5);
-  inset: 0;
-  opacity: 0;
-  position: absolute;
-  transition: opacity 180ms ease;
-}
-
-.room-directory-open .room-directory__scrim {
-  opacity: 1;
-}
-
-.room-directory__panel {
-  background: var(--bg-surface-strong);
-  border-left: 1px solid var(--line-soft);
-  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.28);
-  height: 100%;
-  margin-left: auto;
-  max-width: 440px;
-  overflow: auto;
-  padding: 28px;
-  position: relative;
-  transform: translateX(100%);
-  transition: transform 200ms ease;
-  width: min(100%, 440px);
-}
-
-.room-directory-open .room-directory__panel {
-  transform: translateX(0);
-}
-
-.room-directory__header {
-  align-items: center;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-}
-
-.room-directory__list {
-  display: grid;
-  gap: 12px;
-  margin: 24px 0 30px;
-}
-
-.room-card {
-  align-items: center;
-}
-
-.room-card__thumb {
-  border-radius: 14px;
-  height: 78px;
-  object-fit: cover;
-  width: 108px;
-}
-
-.room-card__meta {
-  display: grid;
-  gap: 4px;
-}
-
-.room-card-active {
-  outline: 2px solid rgba(255, 212, 167, 0.6);
-}
-
-.room-directory__invite {
-  border-top: 1px solid var(--line-soft);
-  padding-top: 20px;
 }
 
 @media (max-width: 760px) {
@@ -682,15 +716,33 @@ h3 {
     padding: 24px;
   }
 
+  .social-room-app,
+  .room-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .community-nav {
+    grid-template-columns: 100%;
+    min-height: auto;
+    position: relative;
+  }
+
+  .community-nav__rail {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .community-nav__panel {
+    display: none;
+  }
+
+  .community-nav:not(.community-nav-collapsed) .community-nav__panel {
+    display: block;
+  }
+
   .room-stage {
     min-height: 100svh;
     padding: 18px;
-  }
-
-  .room-stage__hud,
-  .portal-strip,
-  .room-directory__header {
-    flex-direction: column;
   }
 
   .room-stage__canvas-shell {
@@ -699,8 +751,7 @@ h3 {
     width: 100%;
   }
 
-  .room-stage__avatar-card,
-  .room-stage__hotspot {
+  .room-stage__avatar-card {
     bottom: auto;
     left: 22px;
     margin-top: 16px;
@@ -715,34 +766,16 @@ h3 {
     top: 8px;
   }
 
-  .room-stage__directory-button {
-    right: 10px;
-    top: 56px;
-  }
-
-  .portal-strip {
-    bottom: 52svh;
-    left: 10px;
-    right: 10px;
-  }
-
   .room-stage__hint {
-    bottom: 50svh;
+    bottom: 12px;
     left: 10px;
     right: auto;
   }
 
-  .room-directory__panel {
-    max-width: 100%;
-    width: 100%;
-  }
-
   .chat-panel {
     border-radius: 24px 24px 0 0;
-    bottom: 0;
+    border-width: 1px 0 0;
     max-height: 48svh;
-    right: 0;
-    top: auto;
     width: 100%;
   }
 
