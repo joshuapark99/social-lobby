@@ -396,31 +396,48 @@ h3 {
 
 .community-nav__switcher {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
 .community-nav__community {
   align-items: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 247, 234, 0.16), rgba(135, 217, 158, 0.08)),
+    rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 247, 234, 0.14);
+  border-radius: 999px;
   display: inline-flex;
-  height: 48px;
+  height: 42px;
   justify-content: center;
+  letter-spacing: 0;
+  padding: 0;
+  position: relative;
   transition:
-    border-radius 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
     transform 180ms ease;
-  width: 48px;
+  width: 42px;
 }
 
 .community-nav__community:hover,
 .community-nav__community-active {
-  background: #fff7ea;
-  border-color: #fff7ea;
-  border-radius: 14px;
-  color: #15171c;
+  background:
+    linear-gradient(135deg, #fff7ea, #87d99e),
+    #fff7ea;
+  border-color: rgba(255, 247, 234, 0.8);
+  color: #172016;
   transform: translateY(-1px);
+}
+
+.community-nav__community-active::before {
+  background: #87d99e;
+  border-radius: 999px;
+  content: "";
+  height: 22px;
+  left: -11px;
+  position: absolute;
+  width: 3px;
 }
 
 .community-nav__add {
@@ -620,6 +637,9 @@ h3 {
   border: none;
   border-radius: 0;
   box-shadow: none;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
   min-height: 100vh;
   padding: 24px;
 }
@@ -632,7 +652,7 @@ h3 {
   width: 100%;
 }
 
-.room-stage__hud,
+.room-stage__header,
 .room-stage__avatar-card,
 .room-stage__canvas-shell,
 .room-stage__hint {
@@ -640,48 +660,38 @@ h3 {
   z-index: 1;
 }
 
-.room-stage__hud {
-  align-items: flex-start;
-  background: linear-gradient(180deg, rgba(12, 8, 6, 0.58), rgba(12, 8, 6, 0));
-  border-radius: 18px;
-  display: block;
-  left: 16px;
-  max-width: min(420px, calc(100vw - 120px));
-  padding: 48px 16px 12px;
-  position: absolute;
-  top: 12px;
+.room-stage__header {
+  align-items: baseline;
+  background: rgba(12, 8, 6, 0.48);
+  border: 1px solid rgba(255, 242, 224, 0.12);
+  border-radius: 12px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 14px 16px;
 }
 
-.room-stage__hud h2 {
+.room-stage__header h2 {
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.room-stage__hud p {
+.room-stage__header p {
   color: rgba(255, 247, 234, 0.74);
   font-weight: 800;
-  margin: 8px 0 0;
-}
-
-.room-stage__join {
-  background: #87d99e;
-  border: 0;
-  border-radius: 8px;
-  color: #122016;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 800;
-  margin-top: 12px;
-  padding: 10px 14px;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .room-stage__canvas-shell {
   background: rgba(19, 12, 8, 0.08);
   border: 1px solid rgba(255, 242, 224, 0.12);
   border-radius: 24px;
-  height: min(72vh, 980px);
-  inset: 0;
+  height: auto;
   margin: 0;
-  position: absolute;
+  min-height: 0;
+  position: relative;
   overflow: hidden;
   width: 100%;
 }
@@ -711,10 +721,8 @@ h3 {
 
 .room-stage__hint {
   color: var(--copy-soft);
-  bottom: 86px;
   margin: 0;
-  position: absolute;
-  right: 24px;
+  justify-self: end;
 }
 
 .room-stage-personal::after {
@@ -764,6 +772,30 @@ h3 {
   margin: 18px 0;
   overflow: auto;
   padding: 14px 16px;
+}
+
+.twitch-chat__join-row {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 241, 225, 0.1);
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.twitch-chat__join-row p {
+  margin: 0;
+}
+
+.twitch-chat__join-row button {
+  background: #87d99e;
+  border: 0;
+  border-radius: 8px;
+  color: #122016;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 12px;
 }
 
 .twitch-chat__messages ul {
@@ -848,13 +880,13 @@ h3 {
   }
 
   .room-stage {
+    gap: 12px;
     min-height: 100svh;
     padding: 18px;
   }
 
   .room-stage__canvas-shell {
     height: 50vh;
-    inset: 0;
     width: 100%;
   }
 
@@ -866,17 +898,15 @@ h3 {
     right: auto;
   }
 
-  .room-stage__hud {
-    left: 10px;
-    max-width: calc(100vw - 132px);
-    padding: 42px 14px 10px;
-    top: 8px;
+  .room-stage__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
   }
 
   .room-stage__hint {
-    bottom: 12px;
-    left: 10px;
-    right: auto;
+    justify-self: start;
   }
 
   .chat-panel {

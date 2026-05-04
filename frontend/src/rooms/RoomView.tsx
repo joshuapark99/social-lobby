@@ -192,16 +192,10 @@ export function RoomView({
         {room ? (
           <>
             <img alt="" className="room-stage__background" src={`/${room.room.layout.backgroundAsset.replace(/\.png$/u, ".svg")}`} />
-            <div className="room-stage__hud">
+            <header className="room-stage__header">
               <h2>{room.room.name}</h2>
-              {joinedRoomSlug === activeRoomSlug ? (
-                <p>Joined room</p>
-              ) : (
-                <button className="room-stage__join" onClick={() => setJoinedRoomSlug(activeRoomSlug)} type="button">
-                  Join room
-                </button>
-              )}
-            </div>
+              <p>{joinedRoomSlug === activeRoomSlug ? "Joined room" : "Previewing room"}</p>
+            </header>
             <div className="room-stage__canvas-shell">
               <PixiRoomCanvas
                 layout={room.room.layout}
@@ -218,6 +212,7 @@ export function RoomView({
         <RoomChatPanel
           draft={chatDraft}
           disabled={joinedRoomSlug !== activeRoomSlug}
+          onJoin={() => setJoinedRoomSlug(activeRoomSlug)}
           messages={messages}
           onDraftChange={setChatDraft}
           onSubmit={handleChatSubmit}
