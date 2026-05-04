@@ -2,11 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { csrfMatches } from "../auth/cookies.js";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
+import type { CommunityAccessService } from "../communities/service.js";
+import { isCommunityAccessError } from "../communities/service.js";
 import type { InviteService } from "./service.js";
 
 export function registerInviteRoutes(
   server: FastifyInstance,
-  options: { authService: AuthService; inviteService: InviteService }
+  options: { authService: AuthService; inviteService: InviteService; communityAccessService: CommunityAccessService }
 ): void {
   server.post<{
     Body: {
@@ -20,6 +22,7 @@ export function registerInviteRoutes(
     if (!identity) return reply;
 
     try {
+      await options.communityAccessService.requireDefaultCommunityManagement(identity.userId);
       const invite = await options.inviteService.createInvite({
         createdByUserId: identity.userId,
         targetEmail: request.body?.targetEmail ?? null,
@@ -28,6 +31,7 @@ export function registerInviteRoutes(
       });
       return reply.status(201).send(invite);
     } catch (error) {
+      if (isCommunityAccessError(error)) return reply.status(403).send({ error: error.message });
       return reply.status(400).send({ error: errorMessage(error) });
     }
   });
@@ -38,8 +42,10 @@ export function registerInviteRoutes(
     if (!identity) return reply;
 
     try {
+      await options.communityAccessService.requireDefaultCommunityManagement(identity.userId);
       return reply.status(200).send(await options.inviteService.revokeInvite(request.params.inviteId));
     } catch (error) {
+      if (isCommunityAccessError(error)) return reply.status(403).send({ error: error.message });
       return reply.status(400).send({ error: errorMessage(error) });
     }
   });

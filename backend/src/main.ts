@@ -4,6 +4,8 @@ import { OidcProvider } from "./auth/oidc.js";
 import { createAuthService, disabledAuthService } from "./auth/service.js";
 import { createChatService, disabledChatService } from "./chat/service.js";
 import { PostgresChatStore } from "./chat/postgresStore.js";
+import { PostgresCommunityAccessStore } from "./communities/postgresStore.js";
+import { createCommunityAccessService, disabledCommunityAccessService } from "./communities/service.js";
 import { PostgresAuthStore } from "./auth/postgresStore.js";
 import { createInviteService, disabledInviteService } from "./invites/service.js";
 import { PostgresInviteStore } from "./invites/postgresStore.js";
@@ -17,6 +19,7 @@ import type { ReadinessResult } from "./server/observability.js";
 const config = loadConfig();
 let authService = disabledAuthService();
 let chatService = disabledChatService();
+let communityAccessService = disabledCommunityAccessService();
 let inviteService = disabledInviteService();
 let roomService = disabledRoomService();
 let teleportService = disabledTeleportService();
@@ -31,6 +34,9 @@ if (config.databaseUrl) {
   });
   chatService = createChatService({
     store: new PostgresChatStore(pool)
+  });
+  communityAccessService = createCommunityAccessService({
+    store: new PostgresCommunityAccessStore(pool)
   });
   inviteService = createInviteService({
     store: new PostgresInviteStore(pool)
@@ -48,6 +54,7 @@ const server = buildServer({
   config,
   authService,
   chatService,
+  communityAccessService,
   inviteService,
   roomService,
   teleportService,

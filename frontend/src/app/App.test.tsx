@@ -43,6 +43,8 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
     baseUrl: "/api",
     updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
     redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+    listCommunityMembers: vi.fn(async () => ({ members: [] })),
+    updateCommunityMemberRole: vi.fn(),
     listCommunities: vi.fn(async () => ({
       communities: [
         {
@@ -147,6 +149,8 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
       redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+      listCommunityMembers: vi.fn(async () => ({ members: [] })),
+      updateCommunityMemberRole: vi.fn(),
       listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
       listCommunityRooms: vi.fn(),
@@ -212,6 +216,8 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
+      listCommunityMembers: vi.fn(async () => ({ members: [] })),
+      updateCommunityMemberRole: vi.fn(),
       listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
       listCommunityRooms: vi.fn(),
@@ -245,6 +251,8 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
+      listCommunityMembers: vi.fn(async () => ({ members: [] })),
+      updateCommunityMemberRole: vi.fn(),
       listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
       listCommunityRooms: vi.fn(),
@@ -278,6 +286,8 @@ describe("App", () => {
           baseUrl: "/api",
           updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
           redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
+          listCommunityMembers: vi.fn(async () => ({ members: [] })),
+          updateCommunityMemberRole: vi.fn(),
           listCommunities: vi.fn(async () => ({ communities: [] })),
           listRooms: vi.fn(async () => ({
             community: { id: "community-1", slug: "default-community", name: "Default Community" },
@@ -307,6 +317,8 @@ describe("App", () => {
           baseUrl: "/api",
           updateProfile: vi.fn(),
           redeemInvite: vi.fn(),
+          listCommunityMembers: vi.fn(async () => ({ members: [] })),
+          updateCommunityMemberRole: vi.fn(),
           listCommunities: vi.fn(async () => ({ communities: [] })),
           listRooms: vi.fn(async () => ({
             community: { id: "community-1", slug: "default-community", name: "Default Community" },
@@ -375,6 +387,8 @@ describe("App", () => {
       baseUrl: "/api",
       updateProfile: vi.fn(),
       redeemInvite: vi.fn(),
+      listCommunityMembers: vi.fn(async () => ({ members: [] })),
+      updateCommunityMemberRole: vi.fn(),
       listCommunities: vi.fn(async () => ({ communities: [] })),
       listRooms: vi.fn(),
       listCommunityRooms: vi.fn(),

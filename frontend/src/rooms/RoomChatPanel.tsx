@@ -6,6 +6,8 @@ export function RoomChatPanel({
   subtitle,
   messages,
   draft,
+  disabled = false,
+  disabledMessage = "Join the room to participate in chat.",
   onDraftChange,
   onSubmit
 }: {
@@ -13,6 +15,8 @@ export function RoomChatPanel({
   subtitle: string;
   messages: RoomChatMessage[];
   draft: string;
+  disabled?: boolean;
+  disabledMessage?: string;
   onDraftChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -39,9 +43,10 @@ export function RoomChatPanel({
       </div>
       <form className="twitch-chat__composer" onSubmit={onSubmit}>
         <label htmlFor="room-chat-input">Message</label>
+        {disabled ? <p className="muted">{disabledMessage}</p> : null}
         <div className="twitch-chat__input-row">
-          <input id="room-chat-input" onChange={(event) => onDraftChange(event.target.value)} value={draft} />
-          <button type="submit">Send</button>
+          <input disabled={disabled} id="room-chat-input" onChange={(event) => onDraftChange(event.target.value)} value={draft} />
+          <button disabled={disabled} type="submit">Send</button>
         </div>
       </form>
     </section>

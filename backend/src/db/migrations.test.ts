@@ -8,7 +8,8 @@ describe("migration assets", () => {
       "002_auth_sessions.sql",
       "003_enable_row_level_security.sql",
       "004_invite_target_email.sql",
-      "005_usernames.sql"
+      "005_usernames.sql",
+      "006_membership_roles.sql"
     ]);
     await expect(seedNames()).resolves.toEqual(["001_default_community_and_rooms.sql"]);
     await expect(seedLayoutNames()).resolves.toEqual(["main-lobby.json", "rooftop.json"]);
@@ -27,13 +28,14 @@ describe("migration assets", () => {
       { seed: true }
     );
 
-    expect(executedSql).toHaveLength(6);
+    expect(executedSql).toHaveLength(7);
     expect(executedSql[0]).toContain("CREATE TABLE IF NOT EXISTS users");
     expect(executedSql[1]).toContain("CREATE TABLE IF NOT EXISTS user_sessions");
     expect(executedSql[2]).toContain("ENABLE ROW LEVEL SECURITY");
     expect(executedSql[3]).toContain("target_email");
     expect(executedSql[4]).toContain("ADD COLUMN IF NOT EXISTS username");
-    expect(executedSql[5]).toContain("main-lobby");
+    expect(executedSql[5]).toContain("memberships_role_check");
+    expect(executedSql[6]).toContain("main-lobby");
   });
 
   test("can execute schema migrations without seed SQL", async () => {
@@ -49,7 +51,7 @@ describe("migration assets", () => {
       { seed: false }
     );
 
-    expect(executedSql).toHaveLength(5);
+    expect(executedSql).toHaveLength(6);
     expect(executedSql.join("\n")).not.toContain("main-lobby");
   });
 });

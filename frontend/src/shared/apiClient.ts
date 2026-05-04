@@ -1,4 +1,10 @@
-import type { CommunityRoomsResponse, RoomChatHistoryResponse, RoomDetailResponse, RoomListResponse } from "../rooms/api";
+import type {
+  CommunityMembersResponse,
+  CommunityRoomsResponse,
+  RoomChatHistoryResponse,
+  RoomDetailResponse,
+  RoomListResponse
+} from "../rooms/api";
 
 export class ApiError extends Error {
   constructor(
@@ -15,6 +21,8 @@ export interface ApiClient {
   updateProfile(username: string): Promise<{ displayName: string; username: string }>;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
   listCommunities(): Promise<CommunityRoomsResponse>;
+  listCommunityMembers(communityId: string): Promise<CommunityMembersResponse>;
+  updateCommunityMemberRole(communityId: string, userId: string, role: "admin" | "member"): Promise<{ userId: string; communityId: string; role: "admin" | "member" }>;
   listRooms(): Promise<RoomListResponse>;
   listCommunityRooms(communitySlug: string): Promise<RoomListResponse>;
   getRoom(roomSlug: string, communitySlug?: string): Promise<RoomDetailResponse>;
@@ -73,6 +81,36 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
       }
 
       return (await response.json()) as CommunityRoomsResponse;
+    },
+    async listCommunityMembers(communityId: string) {
+      const response = await fetch(`${baseUrl}/communities/${encodeURIComponent(communityId)}/members`, {
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to load community members." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to load community members.", response.status);
+      }
+
+      return (await response.json()) as CommunityMembersResponse;
+    },
+    async updateCommunityMemberRole(communityId: string, userId: string, role: "admin" | "member") {
+      const response = await fetch(`${baseUrl}/communities/${encodeURIComponent(communityId)}/members/${encodeURIComponent(userId)}/role`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...csrfHeader()
+        },
+        body: JSON.stringify({ role })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to update member role." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to update member role.", response.status);
+      }
+
+      return (await response.json()) as { userId: string; communityId: string; role: "admin" | "member" };
     },
     async listRooms() {
       const response = await fetch(`${baseUrl}/communities/default/rooms`, {

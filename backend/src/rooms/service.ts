@@ -1,4 +1,12 @@
 import { parseRoomLayout, type RoomLayout } from "../layouts/layout.js";
+import type { CommunityRole } from "../communities/service.js";
+
+export type CommunitySummary = {
+  id: string;
+  slug: string;
+  name: string;
+  viewerRole?: CommunityRole;
+};
 
 export type RoomMetadata = {
   slug: string;
@@ -10,20 +18,12 @@ export type RoomMetadata = {
 };
 
 export type RoomMetadataResponse = {
-  community: {
-    id: string;
-    slug: string;
-    name: string;
-  };
+  community: CommunitySummary;
   room: RoomMetadata;
 };
 
 export type RoomListResponse = {
-  community: {
-    id: string;
-    slug: string;
-    name: string;
-  };
+  community: CommunitySummary;
   rooms: RoomMetadata[];
 };
 
@@ -46,8 +46,8 @@ export type RoomRow = {
 
 export type RoomStore = {
   defaultCommunity(): Promise<{ id: string; slug: string; name: string }>;
-  communitiesForUser(userId: string): Promise<Array<{ id: string; slug: string; name: string }>>;
-  hasActiveMembership(userId: string, communityId: string): Promise<boolean>;
+  communitiesForUser(userId: string): Promise<CommunitySummary[]>;
+  activeMembershipRole(userId: string, communityId: string): Promise<CommunityRole | null>;
   roomsForCommunity(communityId: string): Promise<RoomRow[]>;
   communityBySlug(communitySlug: string): Promise<{ id: string; slug: string; name: string } | null>;
   communityById(communityId: string): Promise<{ id: string; slug: string; name: string } | null>;
@@ -167,8 +167,8 @@ async function accessibleCommunityRooms(
   community: { id: string; slug: string; name: string },
   userId: string
 ): Promise<RoomListResponse> {
-  const hasMembership = await store.hasActiveMembership(userId, community.id);
-  if (!hasMembership) throw new RoomAccessError();
+  const role = await store.activeMembershipRole(userId, community.id);
+  if (!role) throw new RoomAccessError();
 
   const rows = await store.roomsForCommunity(community.id);
   const roomSlugs = rows.map((row) => row.slug);
@@ -177,15 +177,16 @@ async function accessibleCommunityRooms(
     community: {
       id: community.id,
       slug: community.slug,
-      name: community.name
+      name: community.name,
+      viewerRole: role
     },
     rooms: rows.map((row) => toRoomMetadata(row, roomSlugs))
   };
 }
 
 async function accessibleRoomMetadata(store: RoomStore, row: RoomRow, userId: string): Promise<RoomMetadataResponse> {
-  const hasMembership = await store.hasActiveMembership(userId, row.communityId);
-  if (!hasMembership) throw new RoomAccessError();
+  const role = await store.activeMembershipRole(userId, row.communityId);
+  if (!role) throw new RoomAccessError();
 
   const communityRows = await store.roomsForCommunity(row.communityId);
   const roomSlugs = communityRows.map((candidate) => candidate.slug);
@@ -194,7 +195,8 @@ async function accessibleRoomMetadata(store: RoomStore, row: RoomRow, userId: st
     community: {
       id: row.communityId,
       slug: row.communitySlug,
-      name: row.communityName
+      name: row.communityName,
+      viewerRole: role
     },
     room: toRoomMetadata(row, roomSlugs)
   };
