@@ -62,9 +62,10 @@ export function CommunityNavigation({
     communities.communities.find((community) => community.community.slug === selectedCommunitySlug) ?? communities.communities[0] ?? null;
   const canManageSelectedCommunity =
     selectedCommunity?.community.viewerRole === "owner" || selectedCommunity?.community.viewerRole === "admin";
+  const canAssignRoles = selectedCommunity?.community.viewerRole === "owner";
 
   useEffect(() => {
-    if (!settingsOpen || !selectedCommunity || !canManageSelectedCommunity) return;
+    if (!settingsOpen || !selectedCommunity) return;
 
     let active = true;
     setMembersStatus("loading");
@@ -86,7 +87,7 @@ export function CommunityNavigation({
     return () => {
       active = false;
     };
-  }, [apiClient, canManageSelectedCommunity, selectedCommunity, settingsOpen]);
+  }, [apiClient, selectedCommunity, settingsOpen]);
 
   function navigateToRoom(community: RoomListResponse, roomSlug: string) {
     const pathname = `/community/${encodeURIComponent(community.community.slug)}/rooms/${encodeURIComponent(roomSlug)}`;
@@ -177,7 +178,7 @@ export function CommunityNavigation({
         >
           +
         </button>
-        {canManageSelectedCommunity ? (
+        {selectedCommunity ? (
           <button
             aria-label="Community settings"
             className={`community-nav__settings${settingsOpen ? " community-nav__settings-active" : ""}`}
@@ -214,7 +215,7 @@ export function CommunityNavigation({
             </section>
           ) : null}
         </div>
-        {settingsOpen && selectedCommunity && canManageSelectedCommunity ? (
+        {settingsOpen && selectedCommunity ? (
           <section className="community-nav__settings-panel" aria-label={`${selectedCommunity.community.name} settings`}>
             <h3>Members</h3>
             {membersStatus === "loading" ? <p className="muted">Loading members...</p> : null}
@@ -224,8 +225,8 @@ export function CommunityNavigation({
                   <strong>{member.username ?? member.displayName}</strong>
                   <span>{member.email ?? member.displayName}</span>
                 </div>
-                {member.role === "owner" ? (
-                  <span className="community-nav__role">Owner</span>
+                {member.role === "owner" || !canAssignRoles ? (
+                  <span className="community-nav__role">{roleLabel(member.role)}</span>
                 ) : (
                   <button
                     disabled={membersStatus === "saving"}
@@ -270,4 +271,15 @@ function communityInitials(name: string): string {
     .split(/\s+/u)
     .filter(Boolean);
   return (words.length > 1 ? `${words[0][0]}${words[1][0]}` : name.slice(0, 2)).toUpperCase();
+}
+
+function roleLabel(role: CommunityMember["role"]): string {
+  switch (role) {
+    case "owner":
+      return "Owner";
+    case "admin":
+      return "Admin";
+    case "member":
+      return "Member";
+  }
 }
