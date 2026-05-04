@@ -49,9 +49,17 @@ export class CommunityAccessError extends Error {
 }
 
 export function createCommunityAccessService(options: { store: CommunityAccessStore }): CommunityAccessService {
-  async function requireCommunityManagement(input: { actorUserId: string; communityId: string }): Promise<void> {
+  async function requireActiveMembership(input: { actorUserId: string; communityId: string }): Promise<CommunityMembership> {
     const membership = await options.store.membershipForUser(input.actorUserId, input.communityId);
-    if (!membership || membership.status !== "active" || !canManageCommunity(membership.role)) {
+    if (!membership || membership.status !== "active") {
+      throw new CommunityAccessError("community membership required");
+    }
+    return membership;
+  }
+
+  async function requireCommunityManagement(input: { actorUserId: string; communityId: string }): Promise<void> {
+    const membership = await requireActiveMembership(input);
+    if (!canManageCommunity(membership.role)) {
       throw new CommunityAccessError("community admin role required");
     }
   }
@@ -64,7 +72,7 @@ export function createCommunityAccessService(options: { store: CommunityAccessSt
       return community;
     },
     async listCommunityMembers(input) {
-      await requireCommunityManagement(input);
+      await requireActiveMembership(input);
       return options.store.listMembers(input.communityId);
     },
     async assignCommunityRole(input) {

@@ -72,15 +72,25 @@ describe("community access service", () => {
     ).resolves.toMatchObject({ userId: "member-1", role: "admin" });
   });
 
-  test("lists active community members for admins", async () => {
+  test("lists active community members for any active member", async () => {
     const service = createCommunityAccessService({
       store: store([
-        { userId: "admin-1", communityId: "community-1", role: "admin", status: "active" },
+        { userId: "viewer-1", communityId: "community-1", role: "member", status: "active" },
         { userId: "member-1", communityId: "community-1", role: "member", status: "active" }
       ])
     });
 
-    await expect(service.listCommunityMembers({ actorUserId: "admin-1", communityId: "community-1" })).resolves.toHaveLength(2);
+    await expect(service.listCommunityMembers({ actorUserId: "viewer-1", communityId: "community-1" })).resolves.toHaveLength(2);
+  });
+
+  test("rejects member lists for users outside the community", async () => {
+    const service = createCommunityAccessService({
+      store: store([{ userId: "member-1", communityId: "community-1", role: "member", status: "active" }])
+    });
+
+    await expect(service.listCommunityMembers({ actorUserId: "outsider-1", communityId: "community-1" })).rejects.toThrow(
+      "community membership required"
+    );
   });
 
   test("does not allow admins to assign community roles", async () => {

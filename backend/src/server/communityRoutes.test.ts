@@ -47,11 +47,11 @@ function communityAccessService(overrides: Partial<CommunityAccessService> = {})
 }
 
 describe("community routes", () => {
-  test("community admins can list members", async () => {
+  test("community members can list members", async () => {
     const access = communityAccessService();
     const server = buildServer({
       config: loadConfig({}),
-      authService: authService("admin-1"),
+      authService: authService("member-1"),
       communityAccessService: access
     });
 
@@ -82,7 +82,7 @@ describe("community routes", () => {
         }
       ]
     });
-    expect(access.listCommunityMembers).toHaveBeenCalledWith({ actorUserId: "admin-1", communityId: "community-1" });
+    expect(access.listCommunityMembers).toHaveBeenCalledWith({ actorUserId: "member-1", communityId: "community-1" });
   });
 
   test("owners can assign community admins", async () => {

@@ -140,4 +140,93 @@ describe("LobbyView", () => {
 
     await waitFor(() => expect(updateCommunityMemberRole).toHaveBeenCalledWith("community-1", "member-1", "admin"));
   });
+
+  it("lets regular members show all members without settings access", async () => {
+    const updateCommunityMemberRole = vi.fn();
+    render(
+      <LobbyView
+        apiClient={apiClient({
+          listCommunities: vi.fn(async () => ({
+            communities: [
+              {
+                community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "member" as const },
+                rooms: []
+              }
+            ]
+          })),
+          listCommunityMembers: vi.fn(async () => ({
+            members: [
+              {
+                userId: "owner-1",
+                displayName: "Owner",
+                username: "owner",
+                email: "owner@example.com",
+                role: "owner" as const,
+                status: "active"
+              },
+              {
+                userId: "member-1",
+                displayName: "Member",
+                username: "member",
+                email: "member@example.com",
+                role: "member" as const,
+                status: "active"
+              }
+            ]
+          })),
+          updateCommunityMemberRole
+        })}
+        session={session}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: "Community settings" })).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Show all members" }));
+
+    expect(await screen.findByText("member")).toBeInTheDocument();
+    expect(screen.getByText("Member")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Make admin" })).not.toBeInTheDocument();
+    expect(updateCommunityMemberRole).not.toHaveBeenCalled();
+  });
+
+  it("keeps the member list separate from owner settings", async () => {
+    render(
+      <LobbyView
+        apiClient={apiClient({
+          listCommunities: vi.fn(async () => ({
+            communities: [
+              {
+                community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" as const },
+                rooms: []
+              }
+            ]
+          })),
+          listCommunityMembers: vi.fn(async () => ({
+            members: [
+              {
+                userId: "member-1",
+                displayName: "Member",
+                username: "member",
+                email: "member@example.com",
+                role: "member" as const,
+                status: "active"
+              }
+            ]
+          }))
+        })}
+        session={session}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Show all members" }));
+
+    expect(await screen.findByRole("region", { name: "Default Community members" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Make admin" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Community settings" }));
+
+    expect(await screen.findByRole("region", { name: "Default Community settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Make admin" })).toBeInTheDocument();
+  });
 });
