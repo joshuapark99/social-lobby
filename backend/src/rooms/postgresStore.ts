@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
-import type { RoomRow, RoomStore } from "./service.js";
+import type { CommunityRole } from "../communities/service.js";
+import type { CommunitySummary, RoomRow, RoomStore } from "./service.js";
 
 export class PostgresRoomStore implements RoomStore {
   constructor(private readonly pool: Pool) {}
@@ -13,9 +14,9 @@ export class PostgresRoomStore implements RoomStore {
     return community;
   }
 
-  async communitiesForUser(userId: string): Promise<Array<{ id: string; slug: string; name: string }>> {
-    const result = await this.pool.query<{ id: string; slug: string; name: string }>(
-      `SELECT communities.id, communities.slug, communities.name
+  async communitiesForUser(userId: string): Promise<CommunitySummary[]> {
+    const result = await this.pool.query<{ id: string; slug: string; name: string; viewer_role: CommunityRole }>(
+      `SELECT communities.id, communities.slug, communities.name, memberships.role AS viewer_role
        FROM communities
        INNER JOIN memberships ON memberships.community_id = communities.id
        WHERE memberships.user_id = $1
@@ -24,12 +25,17 @@ export class PostgresRoomStore implements RoomStore {
       [userId]
     );
 
-    return result.rows;
+    return result.rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      viewerRole: row.viewer_role
+    }));
   }
 
-  async hasActiveMembership(userId: string, communityId: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `SELECT 1
+  async activeMembershipRole(userId: string, communityId: string): Promise<CommunityRole | null> {
+    const result = await this.pool.query<{ role: CommunityRole }>(
+      `SELECT role
        FROM memberships
        WHERE user_id = $1
          AND community_id = $2
@@ -38,7 +44,7 @@ export class PostgresRoomStore implements RoomStore {
       [userId, communityId]
     );
 
-    return result.rowCount !== null && result.rowCount > 0;
+    return result.rows[0]?.role ?? null;
   }
 
   async roomsForCommunity(communityId: string): Promise<RoomRow[]> {

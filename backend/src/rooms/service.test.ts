@@ -9,7 +9,7 @@ function roomStore(overrides: Partial<RoomStore> = {}): RoomStore {
       communitySlug === "default-community" ? { id: "community-1", slug: "default-community", name: "Default Community" } : null,
     communityById: async (communityId) =>
       communityId === "community-1" ? { id: "community-1", slug: "default-community", name: "Default Community" } : null,
-    hasActiveMembership: async () => true,
+    activeMembershipRole: async () => "member" as const,
     roomsForCommunity: async () => [
       {
         id: "room-1",
@@ -143,7 +143,8 @@ describe("room service", () => {
       community: {
         id: "community-1",
         slug: "default-community",
-        name: "Default Community"
+        name: "Default Community",
+        viewerRole: "member"
       },
       rooms: [
         expect.objectContaining({
@@ -169,7 +170,8 @@ describe("room service", () => {
       community: {
         id: "community-1",
         slug: "default-community",
-        name: "Default Community"
+        name: "Default Community",
+        viewerRole: "member"
       },
       room: expect.objectContaining({
         slug: "main-lobby",
@@ -191,7 +193,8 @@ describe("room service", () => {
           community: {
             id: "community-1",
             slug: "default-community",
-            name: "Default Community"
+            name: "Default Community",
+            viewerRole: "member"
           },
           rooms: [
             expect.objectContaining({ slug: "main-lobby" }),
@@ -209,7 +212,8 @@ describe("room service", () => {
       community: {
         id: "community-1",
         slug: "default-community",
-        name: "Default Community"
+        name: "Default Community",
+        viewerRole: "member"
       },
       room: expect.objectContaining({
         slug: "main-lobby",
@@ -254,7 +258,7 @@ describe("room service", () => {
   test("rejects room access when the user is not an active community member", async () => {
     const service = createRoomService({
       store: roomStore({
-        hasActiveMembership: async () => false
+        activeMembershipRole: async () => null
       })
     });
 

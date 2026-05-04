@@ -377,7 +377,9 @@ h3 {
 }
 
 .community-nav__toggle,
-.community-nav__add {
+.community-nav__add,
+.community-nav__community,
+.community-nav__settings {
   border: 0;
   color: #fff7ea;
   cursor: pointer;
@@ -390,6 +392,35 @@ h3 {
   border-radius: 12px;
   height: 34px;
   width: 44px;
+}
+
+.community-nav__switcher {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.community-nav__community {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  transition:
+    border-radius 180ms ease,
+    transform 180ms ease;
+  width: 48px;
+}
+
+.community-nav__community:hover,
+.community-nav__community-active {
+  background: #fff7ea;
+  border-color: #fff7ea;
+  border-radius: 14px;
+  color: #15171c;
+  transform: translateY(-1px);
 }
 
 .community-nav__add {
@@ -421,6 +452,21 @@ h3 {
   color: #122016;
 }
 
+.community-nav__settings {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(255, 247, 234, 0.82);
+  font-size: 0.68rem;
+  min-height: 34px;
+  padding: 7px 4px;
+  width: 48px;
+}
+
+.community-nav__settings-active {
+  background: rgba(255, 247, 234, 0.18);
+  color: #fff7ea;
+}
+
 .community-nav__panel {
   background:
     linear-gradient(180deg, rgba(47, 52, 62, 0.98), rgba(31, 35, 43, 0.98)),
@@ -447,13 +493,56 @@ h3 {
 }
 
 .community-nav__section p,
-.community-nav__invite label {
+.community-nav__invite label,
+.community-nav__settings-panel h3 {
   color: rgba(255, 247, 234, 0.58);
   display: block;
   font-size: 0.78rem;
   font-weight: 800;
   margin: 0 0 8px;
   text-transform: uppercase;
+}
+
+.community-nav__settings-panel {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+  padding-top: 18px;
+}
+
+.community-nav__member {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.community-nav__member strong,
+.community-nav__member span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.community-nav__member span {
+  color: rgba(255, 247, 234, 0.56);
+  font-size: 0.78rem;
+}
+
+.community-nav__member button,
+.community-nav__role {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #fff7ea;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 8px 9px;
+}
+
+.community-nav__member button {
+  cursor: pointer;
 }
 
 .community-nav__room {
@@ -565,6 +654,24 @@ h3 {
 
 .room-stage__hud h2 {
   margin: 0;
+}
+
+.room-stage__hud p {
+  color: rgba(255, 247, 234, 0.74);
+  font-weight: 800;
+  margin: 8px 0 0;
+}
+
+.room-stage__join {
+  background: #87d99e;
+  border: 0;
+  border-radius: 8px;
+  color: #122016;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  margin-top: 12px;
+  padding: 10px 14px;
 }
 
 .room-stage__canvas-shell {

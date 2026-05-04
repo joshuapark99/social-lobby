@@ -6,6 +6,8 @@ import { defaultAuthService } from "../auth/defaultService.js";
 import type { AuthService } from "../auth/service.js";
 import { registerAuthRoutes } from "../auth/routes.js";
 import { disabledChatService, type ChatService } from "../chat/service.js";
+import { disabledCommunityAccessService, type CommunityAccessService } from "../communities/service.js";
+import { registerCommunityRoutes } from "../communities/routes.js";
 import { disabledInviteService, type InviteService } from "../invites/service.js";
 import { registerInviteRoutes } from "../invites/routes.js";
 import { registerRealtimeRoutes } from "../realtime/routes.js";
@@ -19,6 +21,7 @@ export function buildServer(options: {
   config: Config;
   authService?: AuthService;
   chatService?: ChatService;
+  communityAccessService?: CommunityAccessService;
   inviteService?: InviteService;
   roomService?: RoomService;
   teleportService?: TeleportService;
@@ -29,6 +32,7 @@ export function buildServer(options: {
   const observability = new Observability();
   const authService = options.authService ?? defaultAuthService(options.config);
   const chatService = options.chatService ?? disabledChatService();
+  const communityAccessService = options.communityAccessService ?? disabledCommunityAccessService();
   const inviteService = options.inviteService ?? disabledInviteService();
   const roomService = options.roomService ?? disabledRoomService();
   const teleportService = options.teleportService ?? disabledTeleportService();
@@ -59,7 +63,8 @@ export function buildServer(options: {
 
   registerHealthRoutes(server, { observability, readinessCheck });
   registerAuthRoutes(server, { config: options.config, authService });
-  registerInviteRoutes(server, { authService, inviteService });
+  registerCommunityRoutes(server, { authService, communityAccessService });
+  registerInviteRoutes(server, { authService, inviteService, communityAccessService });
   registerRoomRoutes(server, { authService, roomService, chatService });
   void server.register(async (instance) => {
     registerRealtimeRoutes(instance, { authService, roomService, chatService, teleportService, observability, eventLogger });

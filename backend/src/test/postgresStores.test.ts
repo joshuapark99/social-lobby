@@ -4,6 +4,8 @@ import { PostgresAuthStore } from "../auth/postgresStore.js";
 import { hashSessionToken } from "../auth/session.js";
 import { PostgresChatStore } from "../chat/postgresStore.js";
 import { createChatService } from "../chat/service.js";
+import { PostgresCommunityAccessStore } from "../communities/postgresStore.js";
+import { createCommunityAccessService } from "../communities/service.js";
 import { PostgresInviteStore } from "../invites/postgresStore.js";
 import { createInviteService } from "../invites/service.js";
 import { PostgresTeleportStore } from "../teleport/postgresStore.js";
@@ -71,6 +73,37 @@ describe.sequential("postgres-backed integration paths", () => {
 
       expect(membershipCount.rows[0]?.count).toBe("1");
       expect(redemptionCount.rows[0]?.redemption_count).toBe(1);
+      });
+    });
+  });
+
+  test("persists community owner and admin role assignments", async () => {
+    await withLockedTestDatabase(async () => {
+      await prepareTestDatabase();
+
+      await withTestPool(async (pool) => {
+        const owner = await insertUser(pool, { displayName: "Owner", email: "owner@example.com", subject: "owner-subject" });
+        const member = await insertUser(pool, { displayName: "Member", email: "role-member@example.com", subject: "role-member-subject" });
+        await addMembership(pool, owner.id, undefined, "owner");
+        await addMembership(pool, member.id);
+
+        const service = createCommunityAccessService({ store: new PostgresCommunityAccessStore(pool) });
+
+        await expect(
+          service.assignCommunityRole({
+            actorUserId: owner.id,
+            targetUserId: member.id,
+            communityId: "00000000-0000-4000-8000-000000000001",
+            role: "admin"
+          })
+        ).resolves.toMatchObject({ userId: member.id, role: "admin" });
+
+        await expect(
+          service.requireCommunityManagement({
+            actorUserId: member.id,
+            communityId: "00000000-0000-4000-8000-000000000001"
+          })
+        ).resolves.toBeUndefined();
       });
     });
   });
@@ -153,11 +186,12 @@ async function insertUser(
 async function addMembership(
   pool: { query: (sql: string, values?: unknown[]) => Promise<unknown> },
   userId: string,
-  communityId = "00000000-0000-4000-8000-000000000001"
+  communityId = "00000000-0000-4000-8000-000000000001",
+  role = "member"
 ): Promise<void> {
   await pool.query(
     `INSERT INTO memberships (user_id, community_id, role, status)
-     VALUES ($1, $2, 'member', 'active')`,
-    [userId, communityId]
+     VALUES ($1, $2, $3, 'active')`,
+    [userId, communityId, role]
   );
 }

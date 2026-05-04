@@ -10,6 +10,8 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     baseUrl: "/api",
     updateProfile: vi.fn(),
     redeemInvite: vi.fn(),
+    listCommunityMembers: vi.fn(async () => ({ members: [] })),
+    updateCommunityMemberRole: vi.fn(),
     listCommunities: vi.fn(async () => ({
       communities: [
         {
@@ -198,6 +200,8 @@ describe("RoomView", () => {
     render(<RoomView apiClient={apiClient()} realtimeClient={client} roomSlug="main-lobby" />);
 
     const canvas = await screen.findByLabelText("Pixi room canvas");
+    fireEvent.click(screen.getByRole("button", { name: "Join room" }));
+    await screen.findByText("Joined room");
     Object.defineProperty(canvas, "getBoundingClientRect", {
       value: () => ({
         left: 0,
@@ -245,6 +249,8 @@ describe("RoomView", () => {
 
     render(<RoomView apiClient={apiClient()} realtimeClient={client} roomSlug="main-lobby" />);
     await screen.findByLabelText("Pixi room canvas");
+    fireEvent.click(screen.getByRole("button", { name: "Join room" }));
+    await screen.findByText("Joined room");
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
 
@@ -288,6 +294,7 @@ describe("RoomView", () => {
   it("renders recent room chat history after the room loads", async () => {
     render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "Join room" }));
     expect(await screen.findByText("Person Example")).toBeInTheDocument();
     expect(screen.getByText("Hello room")).toBeInTheDocument();
     expect(screen.getByText("Other Person")).toBeInTheDocument();
@@ -335,6 +342,7 @@ describe("RoomView", () => {
       />
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Join room" }));
     expect(await screen.findByRole("listitem")).toHaveTextContent("Other Person");
     expect(screen.getByRole("listitem")).toHaveTextContent("Realtime hello");
   });

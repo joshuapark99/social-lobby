@@ -28,6 +28,7 @@ export function RoomView({
 }) {
   const [activeRoomSlug, setActiveRoomSlug] = useState(roomSlug);
   const [room, setRoom] = useState<RoomDetailResponse | null>(null);
+  const [joinedRoomSlug, setJoinedRoomSlug] = useState<string | null>(null);
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
@@ -48,6 +49,7 @@ export function RoomView({
     let active = true;
     setRoom(null);
     setMessages([]);
+    setJoinedRoomSlug(null);
 
     apiClient
       .getRoom(activeRoomSlug, communitySlug)
@@ -69,6 +71,15 @@ export function RoomView({
         onOperationalIssue?.({ source: "room_load", message });
       });
 
+    return () => {
+      active = false;
+    };
+  }, [activeRoomSlug, apiClient, communitySlug, onNavigate, onOperationalIssue]);
+
+  useEffect(() => {
+    if (joinedRoomSlug !== activeRoomSlug) return;
+
+    let active = true;
     apiClient
       .listRoomMessages(activeRoomSlug)
       .then((response) => {
@@ -87,26 +98,26 @@ export function RoomView({
     return () => {
       active = false;
     };
-  }, [activeRoomSlug, apiClient, communitySlug, onNavigate, onOperationalIssue]);
+  }, [activeRoomSlug, apiClient, joinedRoomSlug, onNavigate]);
 
   useEffect(() => realtimeClient.subscribe((state) => setRealtime(state)), [realtimeClient]);
   useEffect(() => {
-    if (!room || error) return;
+    if (!room || error || joinedRoomSlug !== activeRoomSlug) return;
 
     return realtimeClient.connect(activeRoomSlug);
-  }, [activeRoomSlug, error, realtimeClient, room]);
+  }, [activeRoomSlug, error, joinedRoomSlug, realtimeClient, room]);
   useEffect(() => {
     if (realtime.status !== "error" || !realtime.error) return;
 
     onOperationalIssue?.({ source: "realtime", message: realtime.error });
   }, [onOperationalIssue, realtime.error, realtime.status]);
   useEffect(() => {
-    if (realtime.messages.length === 0) return;
+    if (joinedRoomSlug !== activeRoomSlug || realtime.messages.length === 0) return;
 
     setMessages((current) => mergeMessages(current, realtime.messages));
-  }, [realtime.messages]);
+  }, [activeRoomSlug, joinedRoomSlug, realtime.messages]);
   useEffect(() => {
-    if (!realtime.snapshot) {
+    if (joinedRoomSlug !== activeRoomSlug || !realtime.snapshot) {
       setDisplayedLocalOccupant(null);
       setDisplayedRemoteOccupants([]);
       return;
@@ -121,10 +132,10 @@ export function RoomView({
         occupants: realtime.snapshot.occupants
       })
     );
-  }, [realtime.snapshot]);
+  }, [activeRoomSlug, joinedRoomSlug, realtime.snapshot]);
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (!room || !displayedLocalOccupant) return;
+      if (!room || joinedRoomSlug !== activeRoomSlug || !displayedLocalOccupant) return;
 
       const delta = keyboardDelta(event.key);
       if (!delta) return;
@@ -141,10 +152,10 @@ export function RoomView({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeRoomSlug, displayedLocalOccupant, realtimeClient, room]);
+  }, [activeRoomSlug, displayedLocalOccupant, joinedRoomSlug, realtimeClient, room]);
 
   function handlePointerIntent(point: NormalizedRoomPoint) {
-    if (!room) return;
+    if (!room || joinedRoomSlug !== activeRoomSlug) return;
 
     realtimeClient.requestMovement({
       roomSlug: activeRoomSlug,
@@ -158,6 +169,7 @@ export function RoomView({
 
   function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (joinedRoomSlug !== activeRoomSlug) return;
     const body = chatDraft.trim();
     if (!body) return;
 
@@ -182,6 +194,13 @@ export function RoomView({
             <img alt="" className="room-stage__background" src={`/${room.room.layout.backgroundAsset.replace(/\.png$/u, ".svg")}`} />
             <div className="room-stage__hud">
               <h2>{room.room.name}</h2>
+              {joinedRoomSlug === activeRoomSlug ? (
+                <p>Joined room</p>
+              ) : (
+                <button className="room-stage__join" onClick={() => setJoinedRoomSlug(activeRoomSlug)} type="button">
+                  Join room
+                </button>
+              )}
             </div>
             <div className="room-stage__canvas-shell">
               <PixiRoomCanvas
@@ -198,6 +217,7 @@ export function RoomView({
         </section>
         <RoomChatPanel
           draft={chatDraft}
+          disabled={joinedRoomSlug !== activeRoomSlug}
           messages={messages}
           onDraftChange={setChatDraft}
           onSubmit={handleChatSubmit}

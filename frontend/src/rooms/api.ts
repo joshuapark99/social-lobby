@@ -24,6 +24,7 @@ export interface RoomListResponse {
     id: string;
     slug: string;
     name: string;
+    viewerRole?: "owner" | "admin" | "member";
   };
   rooms: RoomMetadata[];
 }
@@ -37,8 +38,22 @@ export interface RoomDetailResponse {
     id: string;
     slug: string;
     name: string;
+    viewerRole?: "owner" | "admin" | "member";
   };
   room: RoomMetadata;
+}
+
+export interface CommunityMember {
+  userId: string;
+  displayName: string;
+  username: string | null;
+  email: string | null;
+  role: "owner" | "admin" | "member";
+  status: string;
+}
+
+export interface CommunityMembersResponse {
+  members: CommunityMember[];
 }
 
 export interface RoomChatMessage {

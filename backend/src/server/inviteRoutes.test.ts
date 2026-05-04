@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { buildServer } from "./server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
+import { CommunityAccessError, type CommunityAccessService } from "../communities/service.js";
 import type { InviteService } from "../invites/service.js";
 import { registerInviteRoutes } from "../invites/routes.js";
 
@@ -30,6 +31,20 @@ function inviteService(overrides: Partial<InviteService> = {}): InviteService {
   };
 }
 
+function communityAccessService(overrides: Partial<CommunityAccessService> = {}): CommunityAccessService {
+  return {
+    requireCommunityManagement: vi.fn(),
+    requireDefaultCommunityManagement: vi.fn(async () => ({
+      id: "community-1",
+      slug: "default-community",
+      name: "Default Community"
+    })),
+    listCommunityMembers: vi.fn(async () => []),
+    assignCommunityRole: vi.fn(),
+    ...overrides
+  };
+}
+
 describe("invite routes", () => {
   test("invite route registration is owned by the invites module", () => {
     expect(registerInviteRoutes).toEqual(expect.any(Function));
@@ -37,7 +52,13 @@ describe("invite routes", () => {
 
   test("POST /admin/invites creates an invite for an authenticated admin session", async () => {
     const invites = inviteService();
-    const server = buildServer({ config: loadConfig({}), authService: authService("admin-1"), inviteService: invites });
+    const access = communityAccessService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("admin-1"),
+      inviteService: invites,
+      communityAccessService: access
+    });
 
     const response = await server.inject({
       method: "POST",
@@ -61,6 +82,33 @@ describe("invite routes", () => {
       maxRedemptions: 1,
       expiresAt: null
     });
+    expect(access.requireDefaultCommunityManagement).toHaveBeenCalledWith("admin-1");
+  });
+
+  test("POST /admin/invites requires a community admin role", async () => {
+    const invites = inviteService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("member-1"),
+      inviteService: invites,
+      communityAccessService: communityAccessService({
+        requireDefaultCommunityManagement: vi.fn(async () => {
+          throw new CommunityAccessError("community admin role required");
+        })
+      })
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "api/admin/invites",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { targetEmail: "Friend@Example.com", maxRedemptions: 1 }
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ error: "community admin role required" });
+    expect(invites.createInvite).not.toHaveBeenCalled();
   });
 
   test("POST /invites/redeem redeems an invite for the authenticated user", async () => {
@@ -86,7 +134,13 @@ describe("invite routes", () => {
 
   test("POST /admin/invites/:inviteId/revoke revokes an invite", async () => {
     const invites = inviteService();
-    const server = buildServer({ config: loadConfig({}), authService: authService("admin-1"), inviteService: invites });
+    const access = communityAccessService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("admin-1"),
+      inviteService: invites,
+      communityAccessService: access
+    });
 
     const response = await server.inject({
       method: "POST",
@@ -97,6 +151,7 @@ describe("invite routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "revoked" });
+    expect(access.requireDefaultCommunityManagement).toHaveBeenCalledWith("admin-1");
     expect(invites.revokeInvite).toHaveBeenCalledWith("invite-1");
   });
 
