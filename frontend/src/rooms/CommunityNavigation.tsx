@@ -18,6 +18,7 @@ export function CommunityNavigation({
   const [selectedCommunitySlug, setSelectedCommunitySlug] = useState(activeCommunitySlug ?? "");
   const [addCommunityOpen, setAddCommunityOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [membersStatus, setMembersStatus] = useState<"idle" | "loading" | "saving" | "error">("idle");
   const [inviteCode, setInviteCode] = useState("");
@@ -65,7 +66,7 @@ export function CommunityNavigation({
   const canAssignRoles = selectedCommunity?.community.viewerRole === "owner";
 
   useEffect(() => {
-    if (!settingsOpen || !selectedCommunity) return;
+    if ((!settingsOpen && !membersOpen) || !selectedCommunity) return;
 
     let active = true;
     setMembersStatus("loading");
@@ -87,7 +88,7 @@ export function CommunityNavigation({
     return () => {
       active = false;
     };
-  }, [apiClient, selectedCommunity, settingsOpen]);
+  }, [apiClient, membersOpen, selectedCommunity, settingsOpen]);
 
   function navigateToRoom(community: RoomListResponse, roomSlug: string) {
     const pathname = `/community/${encodeURIComponent(community.community.slug)}/rooms/${encodeURIComponent(roomSlug)}`;
@@ -157,6 +158,7 @@ export function CommunityNavigation({
                 setCollapsed(false);
                 setAddCommunityOpen(false);
                 setSettingsOpen(false);
+                setMembersOpen(false);
                 setSelectedCommunitySlug(community.community.slug);
               }}
               title={community.community.name}
@@ -171,6 +173,7 @@ export function CommunityNavigation({
           onClick={() => {
             setCollapsed(false);
             setSettingsOpen(false);
+            setMembersOpen(false);
             setAddCommunityOpen((current) => !current);
           }}
           type="button"
@@ -178,20 +181,6 @@ export function CommunityNavigation({
         >
           +
         </button>
-        {selectedCommunity ? (
-          <button
-            aria-label="Community settings"
-            className={`community-nav__settings${settingsOpen ? " community-nav__settings-active" : ""}`}
-            onClick={() => {
-              setCollapsed(false);
-              setAddCommunityOpen(false);
-              setSettingsOpen((current) => !current);
-            }}
-            type="button"
-          >
-            Settings
-          </button>
-        ) : null}
       </div>
       <div className="community-nav__panel">
         <div className="community-nav__header">
@@ -212,12 +201,52 @@ export function CommunityNavigation({
                   {room.name}
                 </button>
               ))}
+              <button
+                className={`community-nav__members-toggle${membersOpen ? " community-nav__members-toggle-active" : ""}`}
+                onClick={() => {
+                  setAddCommunityOpen(false);
+                  setSettingsOpen(false);
+                  setMembersOpen((current) => !current);
+                }}
+                type="button"
+              >
+                {membersOpen ? "Hide members" : "Show all members"}
+              </button>
+              {canManageSelectedCommunity ? (
+                <button
+                  aria-label="Community settings"
+                  className={`community-nav__settings-toggle${settingsOpen ? " community-nav__settings-toggle-active" : ""}`}
+                  onClick={() => {
+                    setAddCommunityOpen(false);
+                    setMembersOpen(false);
+                    setSettingsOpen((current) => !current);
+                  }}
+                  type="button"
+                >
+                  {settingsOpen ? "Hide settings" : "Community settings"}
+                </button>
+              ) : null}
             </section>
           ) : null}
         </div>
-        {settingsOpen && selectedCommunity ? (
-          <section className="community-nav__settings-panel" aria-label={`${selectedCommunity.community.name} settings`}>
+        {membersOpen && selectedCommunity ? (
+          <section className="community-nav__settings-panel" aria-label={`${selectedCommunity.community.name} members`}>
             <h3>Members</h3>
+            {membersStatus === "loading" ? <p className="muted">Loading members...</p> : null}
+            {members.map((member) => (
+              <div className="community-nav__member" key={member.userId}>
+                <div>
+                  <strong>{member.username ?? member.displayName}</strong>
+                  <span>{member.email ?? member.displayName}</span>
+                </div>
+                <span className="community-nav__role">{roleLabel(member.role)}</span>
+              </div>
+            ))}
+          </section>
+        ) : null}
+        {settingsOpen && selectedCommunity && canManageSelectedCommunity ? (
+          <section className="community-nav__settings-panel" aria-label={`${selectedCommunity.community.name} settings`}>
+            <h3>Member settings</h3>
             {membersStatus === "loading" ? <p className="muted">Loading members...</p> : null}
             {members.map((member) => (
               <div className="community-nav__member" key={member.userId}>
