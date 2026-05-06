@@ -18,8 +18,12 @@ import {
   parseMoveRequestEvent,
   parseRoomJoinEvent,
   parseTeleportRequestEvent,
+  parseVoiceJoinEvent,
+  parseVoiceLeaveEvent,
+  parseVoiceSignalEvent,
   type PresenceOccupant
 } from "./protocol.js";
+import { InMemoryVoiceRegistry, type VoiceParticipant } from "./voice.js";
 
 export function registerRealtimeRoutes(
   server: FastifyInstance,
@@ -29,11 +33,13 @@ export function registerRealtimeRoutes(
     roomService: RoomService;
     teleportService: TeleportService;
     presenceRegistry?: InMemoryPresenceRegistry;
+    voiceRegistry?: InMemoryVoiceRegistry;
     observability: Observability;
     eventLogger: EventLogger;
   }
 ): void {
   const presenceRegistry = options.presenceRegistry ?? new InMemoryPresenceRegistry();
+  const voiceRegistry = options.voiceRegistry ?? new InMemoryVoiceRegistry();
 
   server.route<{ Params: { roomSlug: string } }>({
     method: "GET",
@@ -63,6 +69,7 @@ export function registerRealtimeRoutes(
       if (!connection) {
         return;
       }
+      const activeConnection = connection;
 
       let joinedConnectionId: string | null = null;
       let cleanedUp = false;
@@ -259,6 +266,7 @@ export function registerRealtimeRoutes(
                 throw error;
               }
 
+              removeVoiceParticipant(currentRoomSlug, joinedConnectionId);
               const removed = presenceRegistry.leave(currentRoomSlug, joinedConnectionId);
               if (removed) {
                 options.observability.roomOccupancyChanged(currentRoomSlug, presenceRegistry.occupants(currentRoomSlug).length);
@@ -334,6 +342,95 @@ export function registerRealtimeRoutes(
               broadcast(presenceRegistry.peers(currentRoomSlug, joinedConnectionId), createdEvent);
               return;
             }
+            case "voice.join": {
+              if (!joinedConnectionId) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before voice", envelope.requestId));
+                return;
+              }
+
+              const voiceJoin = parseVoiceJoinEvent(message.toString());
+              if (voiceJoin.payload.roomSlug !== currentRoomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "voice roomSlug must match the active room", voiceJoin.requestId));
+                return;
+              }
+
+              const room = await validateActiveRoomAccess(identity, currentRoomSlug, voiceJoin.requestId);
+              if (!room) return;
+
+              const occupant = presenceRegistry.occupants(currentRoomSlug).find((candidate) => candidate.connectionId === joinedConnectionId);
+              if (!occupant) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before voice", voiceJoin.requestId));
+                return;
+              }
+
+              const participant = voiceParticipantFor(occupant);
+              const participants = voiceRegistry.join(room.room.slug, participant, connection);
+              send(
+                connection,
+                buildServerEvent("voice.snapshot", {
+                  roomSlug: room.room.slug,
+                  self: participant,
+                  participants
+                }, voiceJoin.requestId)
+              );
+              broadcast(
+                voiceRegistry.peerSockets(room.room.slug, participant.connectionId),
+                buildServerEvent("voice.joined", { roomSlug: room.room.slug, participant })
+              );
+              return;
+            }
+            case "voice.leave": {
+              if (!joinedConnectionId) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before voice", envelope.requestId));
+                return;
+              }
+
+              const voiceLeave = parseVoiceLeaveEvent(message.toString());
+              if (voiceLeave.payload.roomSlug !== currentRoomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "voice roomSlug must match the active room", voiceLeave.requestId));
+                return;
+              }
+
+              const room = await validateActiveRoomAccess(identity, currentRoomSlug, voiceLeave.requestId);
+              if (!room) return;
+              removeVoiceParticipant(room.room.slug, joinedConnectionId);
+              return;
+            }
+            case "voice.signal": {
+              if (!joinedConnectionId) {
+                send(connection, buildErrorEvent("join_required", "room.join must be processed before voice", envelope.requestId));
+                return;
+              }
+
+              const voiceSignal = parseVoiceSignalEvent(message.toString());
+              if (voiceSignal.payload.roomSlug !== currentRoomSlug) {
+                send(connection, buildErrorEvent("room_mismatch", "voice roomSlug must match the active room", voiceSignal.requestId));
+                return;
+              }
+
+              const room = await validateActiveRoomAccess(identity, currentRoomSlug, voiceSignal.requestId);
+              if (!room) return;
+              if (!voiceRegistry.has(room.room.slug, joinedConnectionId)) {
+                send(connection, buildErrorEvent("voice_join_required", "voice.join must be processed before signaling", voiceSignal.requestId));
+                return;
+              }
+
+              const target = voiceRegistry.socketFor(room.room.slug, voiceSignal.payload.targetConnectionId);
+              if (!target) {
+                send(connection, buildErrorEvent("voice_peer_not_found", "target voice peer not found", voiceSignal.requestId));
+                return;
+              }
+
+              send(
+                target,
+                buildServerEvent("voice.signal", {
+                  fromConnectionId: joinedConnectionId,
+                  targetConnectionId: voiceSignal.payload.targetConnectionId,
+                  signal: voiceSignal.payload.signal
+                }, voiceSignal.requestId)
+              );
+              return;
+            }
             default: {
               send(connection, buildErrorEvent("unsupported_event", `unsupported realtime event type: ${envelope.type}`, envelope.requestId));
               return;
@@ -355,12 +452,8 @@ export function registerRealtimeRoutes(
         const roomSlug = currentRoomSlug;
 
         if (!identityPromise) return;
-        void identityPromise.then(async (identity) => {
-          if (!identity?.userId) return;
-
-          const room = await options.roomService.roomBySlug(roomSlug, identity.userId).catch(() => null);
-          if (!room) return;
-
+        void identityPromise.then(() => {
+          removeVoiceParticipant(roomSlug, connectionId);
           const removed = presenceRegistry.leave(roomSlug, connectionId);
           if (!removed) return;
           options.observability.roomOccupancyChanged(roomSlug, presenceRegistry.occupants(roomSlug).length);
@@ -380,6 +473,50 @@ export function registerRealtimeRoutes(
           );
         });
       });
+
+      async function validateActiveRoomAccess(
+        identity: OidcIdentity | null,
+        roomSlug: string,
+        requestId?: string
+      ): Promise<RoomMetadataResponse | null> {
+        if (!identity?.userId) {
+          send(activeConnection, buildErrorEvent("session_required", "session required", requestId));
+          return null;
+        }
+
+        let room;
+        try {
+          room = await options.roomService.roomBySlug(roomSlug, identity.userId);
+        } catch (error) {
+          if (isRoomAccessError(error)) {
+            send(activeConnection, buildErrorEvent("access_denied", error.message, requestId));
+            return null;
+          }
+
+          throw error;
+        }
+
+        if (!room) {
+          send(activeConnection, buildErrorEvent("room_not_found", "room not found", requestId));
+          return null;
+        }
+
+        return room;
+      }
+
+      function removeVoiceParticipant(roomSlug: string, connectionId: string): void {
+        const participant = voiceRegistry.leave(roomSlug, connectionId);
+        if (!participant) return;
+
+        broadcast(
+          voiceRegistry.peerSockets(roomSlug, participant.connectionId),
+          buildServerEvent("voice.left", {
+            roomSlug,
+            connectionId: participant.connectionId,
+            userId: participant.userId
+          })
+        );
+      }
     }
   });
 }
@@ -396,6 +533,15 @@ async function requireRealtimeIdentity(
     return null;
   }
   return identity as OidcIdentity & { userId: string };
+}
+
+function voiceParticipantFor(occupant: PresenceOccupant): VoiceParticipant {
+  return {
+    connectionId: occupant.connectionId,
+    userId: occupant.userId,
+    email: occupant.email,
+    name: occupant.name
+  };
 }
 
 function createOccupant(

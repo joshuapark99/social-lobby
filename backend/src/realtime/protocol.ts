@@ -33,6 +33,20 @@ export const teleportRequestPayloadSchema = z.object({
   targetRoom: z.string().trim().min(1)
 });
 
+export const voiceJoinPayloadSchema = z.object({
+  roomSlug: z.string().trim().min(1)
+});
+
+export const voiceLeavePayloadSchema = z.object({
+  roomSlug: z.string().trim().min(1)
+});
+
+export const voiceSignalPayloadSchema = z.object({
+  roomSlug: z.string().trim().min(1),
+  targetConnectionId: z.string().trim().min(1),
+  signal: z.unknown()
+});
+
 export const roomJoinEventSchema = clientEnvelopeSchema.extend({
   type: z.literal("room.join"),
   payload: roomJoinPayloadSchema
@@ -53,11 +67,29 @@ export const teleportRequestEventSchema = clientEnvelopeSchema.extend({
   payload: teleportRequestPayloadSchema
 });
 
+export const voiceJoinEventSchema = clientEnvelopeSchema.extend({
+  type: z.literal("voice.join"),
+  payload: voiceJoinPayloadSchema
+});
+
+export const voiceLeaveEventSchema = clientEnvelopeSchema.extend({
+  type: z.literal("voice.leave"),
+  payload: voiceLeavePayloadSchema
+});
+
+export const voiceSignalEventSchema = clientEnvelopeSchema.extend({
+  type: z.literal("voice.signal"),
+  payload: voiceSignalPayloadSchema
+});
+
 export type ClientEnvelope = z.infer<typeof clientEnvelopeSchema>;
 export type RoomJoinEvent = z.infer<typeof roomJoinEventSchema>;
 export type MoveRequestEvent = z.infer<typeof moveRequestEventSchema>;
 export type ChatSendEvent = z.infer<typeof chatSendEventSchema>;
 export type TeleportRequestEvent = z.infer<typeof teleportRequestEventSchema>;
+export type VoiceJoinEvent = z.infer<typeof voiceJoinEventSchema>;
+export type VoiceLeaveEvent = z.infer<typeof voiceLeaveEventSchema>;
+export type VoiceSignalEvent = z.infer<typeof voiceSignalEventSchema>;
 
 export type PresenceOccupant = {
   connectionId: string;
@@ -120,6 +152,18 @@ export function parseChatSendEvent(input: string): ChatSendEvent {
 
 export function parseTeleportRequestEvent(input: string): TeleportRequestEvent {
   return teleportRequestEventSchema.parse(JSON.parse(input));
+}
+
+export function parseVoiceJoinEvent(input: string): VoiceJoinEvent {
+  return voiceJoinEventSchema.parse(JSON.parse(input));
+}
+
+export function parseVoiceLeaveEvent(input: string): VoiceLeaveEvent {
+  return voiceLeaveEventSchema.parse(JSON.parse(input));
+}
+
+export function parseVoiceSignalEvent(input: string): VoiceSignalEvent {
+  return voiceSignalEventSchema.parse(JSON.parse(input));
 }
 
 export function buildServerEvent<TType extends string, TPayload extends object>(

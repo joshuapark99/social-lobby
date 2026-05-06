@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 test("blocks anonymous room entry behind the welcome screen", async ({ page }) => {
   await installAppHarness(page, { session: "anonymous" });
@@ -20,6 +20,8 @@ test("supports room switching, movement requests, and chat fanout for authentica
   await expect(page.getByRole("button", { name: "Rooftop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add community" })).toBeVisible();
 
+  await joinRoom(page);
+
   await page.keyboard.press("ArrowRight");
   await expect.poll(async () => {
     return page.evaluate(() => window.__SOCIAL_LOBBY_SMOKE_STATE__.movementRequests.length);
@@ -28,6 +30,7 @@ test("supports room switching, movement requests, and chat fanout for authentica
   await page.getByRole("button", { name: "Rooftop" }).click();
   await expect(page).toHaveURL(/\/community\/default-community\/rooms\/rooftop$/u);
   await expect(page.getByRole("heading", { name: "Rooftop", exact: true })).toBeVisible();
+  await joinRoom(page);
 
   await page.getByLabel("Message").fill("Hello room");
   await page.getByRole("button", { name: "Send" }).click();
@@ -43,6 +46,52 @@ test("supports room switching, movement requests, and chat fanout for authentica
   await page.getByRole("button", { name: "Add community" }).click();
   await expect(page.getByLabel("Invite code")).toBeVisible();
 });
+
+test("supports room voice join and local voice controls for authenticated users", async ({ page }) => {
+  await installAppHarness(page, { session: "authenticated" });
+
+  await page.goto("/community/default-community/rooms/main-lobby");
+
+  await expect(page.getByRole("heading", { name: "Main Lobby", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Join voice" })).toBeDisabled();
+
+  await joinRoom(page);
+  await expect(page.getByRole("button", { name: "Join voice" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Join voice" }).click();
+  await expect(page.getByRole("button", { name: "Leave voice" })).toBeVisible();
+  await expect(page.getByText("june@example.com")).toBeVisible();
+  await expect(page.getByText("Guide")).toBeVisible();
+
+  await expect.poll(async () => {
+    return page.evaluate(() => window.__SOCIAL_LOBBY_SMOKE_STATE__.mediaRequests.length);
+  }).toBe(1);
+  await expect.poll(async () => {
+    return page.evaluate(() => window.__SOCIAL_LOBBY_SMOKE_STATE__.voiceJoinRequests.length);
+  }).toBe(1);
+
+  await stepRangeDown(page.getByLabel("Mic volume"), 13);
+  await expect(page.getByLabel("Mic volume")).toHaveValue("0.35");
+
+  await page.getByLabel("Mute").check();
+  await stepRangeDown(page.getByLabel("Volume", { exact: true }), 15);
+  await expect(page.getByLabel("Mute")).toBeChecked();
+  await expect(page.getByLabel("Volume", { exact: true })).toHaveValue("0.25");
+});
+
+async function stepRangeDown(locator: Locator, steps: number) {
+  await locator.focus();
+  for (let index = 0; index < steps; index += 1) {
+    await locator.page().keyboard.press("ArrowLeft");
+  }
+}
+
+async function joinRoom(page: Parameters<typeof test>[0]["page"]) {
+  const chat = page.getByRole("region", { name: "Room chat" });
+  await chat.getByRole("button", { name: "Join room" }).click();
+  await expect(chat.getByLabel("Message")).toBeVisible();
+  await expect(page.getByText("Realtime: connected")).toBeVisible();
+}
 
 async function installAppHarness(page: Parameters<typeof test>[0]["page"], options: { session: "anonymous" | "authenticated" }) {
   await page.addInitScript(({ session }) => {
@@ -93,8 +142,15 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
 
     const state = {
       movementRequests: [],
-      chatRequests: []
+      chatRequests: [],
+      mediaRequests: [],
+      micGainValues: [],
+      voiceJoinRequests: [],
+      voiceLeaveRequests: [],
+      voiceSignalRequests: []
     };
+
+    installVoiceBrowserFakes(state);
 
     const realtime = createRealtimeClient(rooms, state);
 
@@ -145,6 +201,7 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
         snapshot: null,
         messages: [],
         error: null,
+        voice: emptyVoiceState(),
         connect(roomSlug) {
           const room = roomMap[roomSlug];
           client.status = "connected";
@@ -155,6 +212,7 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
             client.snapshot = null;
             client.messages = [];
             client.error = null;
+            client.voice = emptyVoiceState();
             notify();
           };
         },
@@ -204,6 +262,37 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
           client.messages = [...client.messages, ...nextMessages];
           notify();
         },
+        joinVoice(input) {
+          smokeState.voiceJoinRequests.push(input);
+          const self = {
+            connectionId: "conn-self",
+            userId: "user-june",
+            email: "june@example.com"
+          };
+          client.voice = {
+            self,
+            participants: [
+              self,
+              {
+                connectionId: "conn-guide",
+                userId: "user-guide",
+                email: "guide@example.com",
+                name: "Guide"
+              }
+            ],
+            error: null,
+            signals: []
+          };
+          notify();
+        },
+        leaveVoice(input) {
+          smokeState.voiceLeaveRequests.push(input);
+          client.voice = emptyVoiceState();
+          notify();
+        },
+        sendVoiceSignal(input) {
+          smokeState.voiceSignalRequests.push(input);
+        },
         subscribe(listener) {
           listeners.add(listener);
           return () => listeners.delete(listener);
@@ -218,7 +307,8 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
             status: client.status,
             snapshot: client.snapshot,
             messages: client.messages,
-            error: client.error
+            error: client.error,
+            voice: client.voice
           })
         );
       }
@@ -249,6 +339,86 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
           ]
         };
       }
+
+      function emptyVoiceState() {
+        return {
+          self: null,
+          participants: [],
+          error: null,
+          signals: []
+        };
+      }
+    }
+
+    function installVoiceBrowserFakes(smokeState) {
+      const mediaStream = {
+        getAudioTracks: () => [{ id: "fake-audio-track", kind: "audio", stop() {} }],
+        getTracks: () => [{ id: "fake-audio-track", kind: "audio", stop() {} }]
+      };
+
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: {
+          getUserMedia: async (constraints) => {
+            smokeState.mediaRequests.push(constraints);
+            return mediaStream;
+          }
+        }
+      });
+
+      class FakeAudioContext {
+        createMediaStreamSource(stream) {
+          return {
+            stream,
+            connect() {}
+          };
+        }
+
+        createGain() {
+          const gain = {
+            _value: 1,
+            get value() {
+              return this._value;
+            },
+            set value(nextValue) {
+              this._value = nextValue;
+              smokeState.micGainValues.push(nextValue);
+            }
+          };
+          return {
+            gain,
+            connect() {}
+          };
+        }
+
+        createMediaStreamDestination() {
+          return { stream: mediaStream };
+        }
+
+        close() {
+          return Promise.resolve();
+        }
+      }
+
+      class FakeRTCPeerConnection {
+        addTrack() {}
+        addIceCandidate() {
+          return Promise.resolve();
+        }
+        close() {}
+        createAnswer() {
+          return Promise.resolve({ type: "answer", sdp: "fake-answer" });
+        }
+        setLocalDescription() {
+          return Promise.resolve();
+        }
+        setRemoteDescription() {
+          return Promise.resolve();
+        }
+      }
+
+      window.AudioContext = FakeAudioContext;
+      window.RTCPeerConnection = FakeRTCPeerConnection;
     }
   }, options);
 }

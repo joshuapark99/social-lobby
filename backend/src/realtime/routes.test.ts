@@ -4,7 +4,7 @@ import { buildServer } from "../server/server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
 import { ChatAccessError, type ChatService } from "../chat/service.js";
-import type { RoomService } from "../rooms/service.js";
+import { RoomAccessError, type RoomService } from "../rooms/service.js";
 import { TeleportAccessError, type TeleportService } from "../teleport/service.js";
 
 function authService(userId = "user-1", email = "person@example.com"): AuthService {
@@ -565,6 +565,238 @@ describe("realtime room routes", () => {
     });
   });
 
+  test("rejects voice.join before room.join", async () => {
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+
+    const errorPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "voice.join",
+      requestId: "voice-before-room",
+      payload: { roomSlug: "main-lobby" }
+    }));
+
+    const event = JSON.parse((await errorPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { code?: string; message?: string };
+    };
+
+    expect(event.type).toBe("error");
+    expect(event.requestId).toBe("voice-before-room");
+    expect(event.payload).toEqual({
+      code: "join_required",
+      message: "room.join must be processed before voice"
+    });
+  });
+
+  test("rejects voice events for mismatched rooms or missing room access", async () => {
+    const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    await joinRoom(socket, "main-lobby");
+
+    const mismatchPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "voice.join",
+      requestId: "voice-mismatch",
+      payload: { roomSlug: "rooftop" }
+    }));
+
+    const mismatch = JSON.parse((await mismatchPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { code?: string; message?: string };
+    };
+
+    expect(mismatch.type).toBe("error");
+    expect(mismatch.requestId).toBe("voice-mismatch");
+    expect(mismatch.payload).toEqual({
+      code: "room_mismatch",
+      message: "voice roomSlug must match the active room"
+    });
+
+    vi.mocked(rooms.roomBySlug).mockRejectedValueOnce(new RoomAccessError());
+    const deniedPromise = onceMessage(socket);
+    socket.send(JSON.stringify({
+      version: 1,
+      type: "voice.join",
+      requestId: "voice-denied",
+      payload: { roomSlug: "main-lobby" }
+    }));
+
+    const denied = JSON.parse((await deniedPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { code?: string; message?: string };
+    };
+
+    expect(denied.type).toBe("error");
+    expect(denied.requestId).toBe("voice-denied");
+    expect(denied.payload).toEqual({
+      code: "access_denied",
+      message: "room access denied"
+    });
+  });
+
+  test("sends voice snapshots and fans out room-local voice join and leave events", async () => {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const firstRoomSnapshot = await joinRoom(first, "main-lobby");
+
+    const firstVoiceSnapshotPromise = onceMessage(first);
+    first.send(JSON.stringify({ version: 1, type: "voice.join", requestId: "voice-1", payload: { roomSlug: "main-lobby" } }));
+    const firstVoiceSnapshot = JSON.parse((await firstVoiceSnapshotPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { self?: { connectionId: string; userId: string }; participants?: Array<{ userId: string }> };
+    };
+
+    expect(firstVoiceSnapshot.type).toBe("voice.snapshot");
+    expect(firstVoiceSnapshot.requestId).toBe("voice-1");
+    expect(firstVoiceSnapshot.payload?.self).toMatchObject({
+      connectionId: firstRoomSnapshot.payload.self.connectionId,
+      userId: "user-1"
+    });
+    expect(firstVoiceSnapshot.payload?.participants).toEqual([
+      expect.objectContaining({ userId: "user-1" })
+    ]);
+
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token-2" }
+    }));
+    await joinRoom(second, "main-lobby", onceMessage(first));
+
+    const joinedPromise = onceMessage(first);
+    const secondVoiceSnapshotPromise = onceMessage(second);
+    second.send(JSON.stringify({ version: 1, type: "voice.join", requestId: "voice-2", payload: { roomSlug: "main-lobby" } }));
+
+    const secondVoiceSnapshot = JSON.parse((await secondVoiceSnapshotPromise).toString()) as {
+      type: string;
+      payload?: { participants?: Array<{ userId: string }> };
+    };
+    const joined = JSON.parse((await joinedPromise).toString()) as {
+      type: string;
+      payload?: { participant?: { userId: string } };
+    };
+
+    expect(secondVoiceSnapshot.type).toBe("voice.snapshot");
+    expect(secondVoiceSnapshot.payload?.participants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ userId: "user-1" }),
+        expect.objectContaining({ userId: "user-2" })
+      ])
+    );
+    expect(joined.type).toBe("voice.joined");
+    expect(joined.payload?.participant).toMatchObject({ userId: "user-2" });
+
+    const leftPromise = onceMessage(first);
+    second.send(JSON.stringify({ version: 1, type: "voice.leave", requestId: "voice-leave", payload: { roomSlug: "main-lobby" } }));
+
+    const left = JSON.parse((await leftPromise).toString()) as {
+      type: string;
+      payload?: { connectionId?: string; userId?: string };
+    };
+
+    expect(left.type).toBe("voice.left");
+    expect(left.payload).toMatchObject({ userId: "user-2" });
+  });
+
+  test("relays voice signaling only to active voice peers in the same room", async () => {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    const firstRoomSnapshot = await joinRoom(first, "main-lobby");
+    await joinVoice(first, "main-lobby");
+
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token-2" }
+    }));
+    const joinedPromise = onceMessage(first);
+    const secondRoomSnapshot = await joinRoom(second, "main-lobby");
+    await joinedPromise;
+    await joinVoice(second, "main-lobby", onceMessage(first));
+
+    const signalPromise = onceMessage(second);
+    first.send(JSON.stringify({
+      version: 1,
+      type: "voice.signal",
+      requestId: "signal-1",
+      payload: {
+        roomSlug: "main-lobby",
+        targetConnectionId: secondRoomSnapshot.payload.self.connectionId,
+        signal: { type: "offer", sdp: "fake-sdp" }
+      }
+    }));
+
+    const signal = JSON.parse((await signalPromise).toString()) as {
+      type: string;
+      requestId?: string;
+      payload?: { fromConnectionId?: string; targetConnectionId?: string; signal?: unknown };
+    };
+
+    expect(signal.type).toBe("voice.signal");
+    expect(signal.requestId).toBe("signal-1");
+    expect(signal.payload).toEqual({
+      fromConnectionId: firstRoomSnapshot.payload.self.connectionId,
+      targetConnectionId: secondRoomSnapshot.payload.self.connectionId,
+      signal: { type: "offer", sdp: "fake-sdp" }
+    });
+  });
+
+  test("removes voice participants on disconnect and teleport", async () => {
+    const first = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token" }
+    }));
+    await withTimeout(joinRoom(first, "main-lobby"), "first room join");
+    await withTimeout(joinVoice(first, "main-lobby"), "first voice join");
+
+    const second = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token-2" }
+    }));
+    await withTimeout(joinRoom(second, "main-lobby", onceMessage(first)), "second room join");
+    await withTimeout(joinVoice(second, "main-lobby", onceMessage(first)), "second voice join");
+
+    const disconnectLeftPromise = onceMessage(first);
+    second.terminate();
+    const disconnectLeft = JSON.parse((await withTimeout(disconnectLeftPromise, "disconnect voice left")).toString()) as {
+      type: string;
+      payload?: { userId?: string };
+    };
+    expect(disconnectLeft.type).toBe("voice.left");
+    expect(disconnectLeft.payload?.userId).toBe("user-2");
+
+    const third = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
+      headers: { cookie: "sl_session=session-token-2" }
+    }));
+    await withTimeout(joinRoom(third, "main-lobby"), "third room join");
+    await withTimeout(joinVoice(third, "main-lobby", onceMessage(first)), "third voice join");
+
+    const teleportLeftPromise = onceMessage(first);
+    const teleportedSnapshotPromise = onceMessage(third);
+    third.send(JSON.stringify({
+      version: 1,
+      type: "teleport.request",
+      requestId: "teleport-voice",
+      payload: {
+        roomSlug: "main-lobby",
+        targetRoom: "rooftop"
+      }
+    }));
+
+    const teleportLeft = JSON.parse((await withTimeout(teleportLeftPromise, "teleport voice left")).toString()) as {
+      type: string;
+      payload?: { userId?: string };
+    };
+    expect(teleportLeft.type).toBe("voice.left");
+    expect(teleportLeft.payload?.userId).toBe("user-2");
+    await withTimeout(teleportedSnapshotPromise, "teleport room snapshot");
+  });
+
   test("exposes websocket connection, occupancy, and room event metrics", async () => {
     const socket = rememberSocket(await server.injectWS("/api/rooms/main-lobby/ws", {
       headers: { cookie: "sl_session=session-token" }
@@ -645,4 +877,61 @@ function onceMessage(socket: WebSocket): Promise<WebSocket.RawData> {
     socket.once("message", (data: any) => resolve(data));
     socket.once("error", reject);
   });
+}
+
+async function joinRoom(
+  socket: WebSocket,
+  roomSlug: string,
+  peerEventPromise?: Promise<WebSocket.RawData>
+): Promise<{
+  type: string;
+  payload: {
+    self: { connectionId: string; userId: string };
+    occupants: Array<{ connectionId: string; userId: string }>;
+  };
+}> {
+  const snapshotPromise = onceMessage(socket);
+  socket.send(JSON.stringify({ version: 1, type: "room.join", payload: { roomSlug } }));
+  const snapshot = JSON.parse((await snapshotPromise).toString()) as {
+    type: string;
+    payload: {
+      self: { connectionId: string; userId: string };
+      occupants: Array<{ connectionId: string; userId: string }>;
+    };
+  };
+  await peerEventPromise;
+  return snapshot;
+}
+
+async function joinVoice(
+  socket: WebSocket,
+  roomSlug: string,
+  peerEventPromise?: Promise<WebSocket.RawData>
+): Promise<{
+  type: string;
+  payload: {
+    self: { connectionId: string; userId: string };
+    participants: Array<{ connectionId: string; userId: string }>;
+  };
+}> {
+  const snapshotPromise = onceMessage(socket);
+  socket.send(JSON.stringify({ version: 1, type: "voice.join", payload: { roomSlug } }));
+  const snapshot = JSON.parse((await snapshotPromise).toString()) as {
+    type: string;
+    payload: {
+      self: { connectionId: string; userId: string };
+      participants: Array<{ connectionId: string; userId: string }>;
+    };
+  };
+  await peerEventPromise;
+  return snapshot;
+}
+
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), 1000);
+    })
+  ]);
 }

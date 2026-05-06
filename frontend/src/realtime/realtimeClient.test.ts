@@ -352,4 +352,97 @@ describe("createRealtimeClient", () => {
       }
     ]);
   });
+
+  it("sends voice events and stores room voice participants", () => {
+    let socket: FakeWebSocket | undefined;
+    const client = createRealtimeClient({
+      baseUrl: "/api",
+      webSocketFactory: (url) => {
+        socket = new FakeWebSocket(url);
+        return socket as never;
+      }
+    });
+
+    client.connect("main-lobby");
+    socket?.emit("open", {});
+
+    client.joinVoice({ roomSlug: "main-lobby" });
+    client.sendVoiceSignal({
+      roomSlug: "main-lobby",
+      targetConnectionId: "conn-2",
+      signal: { type: "offer", sdp: "fake-sdp" }
+    });
+    client.leaveVoice({ roomSlug: "main-lobby" });
+
+    expect(socket?.sent).toContain(JSON.stringify({ version: 1, type: "voice.join", payload: { roomSlug: "main-lobby" } }));
+    expect(socket?.sent).toContain(
+      JSON.stringify({
+        version: 1,
+        type: "voice.signal",
+        payload: {
+          roomSlug: "main-lobby",
+          targetConnectionId: "conn-2",
+          signal: { type: "offer", sdp: "fake-sdp" }
+        }
+      })
+    );
+    expect(socket?.sent).toContain(JSON.stringify({ version: 1, type: "voice.leave", payload: { roomSlug: "main-lobby" } }));
+
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "voice.snapshot",
+        occurredAt: "2026-05-06T10:10:00.000Z",
+        payload: {
+          roomSlug: "main-lobby",
+          self: {
+            connectionId: "conn-1",
+            userId: "user-1",
+            email: "person@example.com"
+          },
+          participants: [
+            {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com"
+            }
+          ]
+        }
+      })
+    });
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "voice.joined",
+        occurredAt: "2026-05-06T10:11:00.000Z",
+        payload: {
+          participant: {
+            connectionId: "conn-2",
+            userId: "user-2",
+            email: "other@example.com"
+          }
+        }
+      })
+    });
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "voice.left",
+        occurredAt: "2026-05-06T10:12:00.000Z",
+        payload: {
+          connectionId: "conn-2",
+          userId: "user-2"
+        }
+      })
+    });
+
+    expect(client.voice.self?.connectionId).toBe("conn-1");
+    expect(client.voice.participants).toEqual([
+      {
+        connectionId: "conn-1",
+        userId: "user-1",
+        email: "person@example.com"
+      }
+    ]);
+  });
 });

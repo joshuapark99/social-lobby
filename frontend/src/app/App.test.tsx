@@ -12,10 +12,19 @@ function realtimeClient(): RealtimeClient {
     snapshot: null,
     messages: [],
     error: null,
+    voice: {
+      self: null,
+      participants: [],
+      error: null,
+      signals: []
+    },
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
     requestTeleport: vi.fn(),
     sendChatMessage: vi.fn(),
+    joinVoice: vi.fn(),
+    leaveVoice: vi.fn(),
+    sendVoiceSignal: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };
 }
@@ -468,7 +477,13 @@ describe("App", () => {
           ]
         },
         messages: [],
-        error: null
+        error: null,
+        voice: {
+          self: null,
+          participants: [],
+          error: null,
+          signals: []
+        }
       });
     });
 

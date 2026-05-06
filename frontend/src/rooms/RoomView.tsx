@@ -8,6 +8,7 @@ import { PixiRoomCanvas } from "./PixiRoomCanvas";
 import type { RoomChatMessage, RoomDetailResponse } from "./api";
 import { CommunityNavigation } from "./CommunityNavigation";
 import { RoomChatPanel } from "./RoomChatPanel";
+import { RoomVoicePanel } from "./RoomVoicePanel";
 
 const keyboardStep = 80;
 
@@ -38,7 +39,8 @@ export function RoomView({
     status: realtimeClient.status,
     snapshot: realtimeClient.snapshot,
     messages: realtimeClient.messages,
-    error: realtimeClient.error
+    error: realtimeClient.error,
+    voice: realtimeClient.voice
   }));
 
   useEffect(() => {
@@ -220,6 +222,12 @@ export function RoomView({
           title="Room chat"
         />
       </div>
+      <RoomVoicePanel
+        joinedRoom={joinedRoomSlug === activeRoomSlug}
+        realtimeClient={realtimeClient}
+        roomSlug={activeRoomSlug}
+        voice={realtime.voice}
+      />
     </div>
   );
 }

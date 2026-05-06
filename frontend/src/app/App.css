@@ -840,6 +840,65 @@ h3 {
   color: var(--copy-soft);
 }
 
+.room-voice {
+  align-self: stretch;
+  background: rgba(20, 28, 30, 0.9);
+  border: 1px solid rgba(255, 247, 234, 0.14);
+  color: #fff7eb;
+  display: grid;
+  gap: 12px;
+  grid-column: 2;
+  padding: 16px;
+}
+
+.room-voice__header,
+.room-voice__member {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.room-voice__header h2 {
+  margin: 0;
+}
+
+.room-voice button {
+  background: #87d99e;
+  border: 0;
+  border-radius: 8px;
+  color: #122016;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 9px 12px;
+}
+
+.room-voice button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.room-voice__control,
+.room-voice__member label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.room-voice__members {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.room-voice__member {
+  border-top: 1px solid rgba(255, 247, 234, 0.1);
+  padding-top: 10px;
+}
+
 @media (max-width: 760px) {
   .top-bar {
     align-items: flex-start;
@@ -927,5 +986,9 @@ h3 {
 
   .twitch-chat {
     min-height: 48svh;
+  }
+
+  .room-voice {
+    grid-column: 1;
   }
 }
