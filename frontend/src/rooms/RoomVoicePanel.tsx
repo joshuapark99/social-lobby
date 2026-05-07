@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RealtimeClient, RealtimeVoiceState, VoiceParticipant } from "../realtime/realtimeClient";
 import { createRoomVoiceController, type RoomVoiceController } from "./roomVoiceController";
 
@@ -18,6 +18,7 @@ export function RoomVoicePanel({
   const [micGain, setMicGain] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [speakerSettings, setSpeakerSettings] = useState<Record<string, { muted: boolean; volume: number }>>({});
+  const processedSignalCount = useRef(0);
   const selfConnectionId = voice.self?.connectionId;
 
   useEffect(() => {
@@ -27,7 +28,9 @@ export function RoomVoicePanel({
 
   useEffect(() => {
     if (!joinedVoice) return;
-    voice.signals.forEach((signal) => {
+    const nextSignals = voice.signals.slice(processedSignalCount.current);
+    processedSignalCount.current = voice.signals.length;
+    nextSignals.forEach((signal) => {
       void controller.handleSignal(roomSlug, signal).catch((nextError: unknown) => {
         setError(nextError instanceof Error ? nextError.message : "Voice connection failed.");
       });
@@ -39,9 +42,14 @@ export function RoomVoicePanel({
       if (joinedVoice) {
         realtimeClient.leaveVoice({ roomSlug });
       }
+    };
+  }, [joinedVoice, realtimeClient, roomSlug]);
+
+  useEffect(() => {
+    return () => {
       controller.dispose();
     };
-  }, [controller, joinedVoice, realtimeClient, roomSlug]);
+  }, [controller]);
 
   async function handleJoinVoice() {
     try {
@@ -55,6 +63,7 @@ export function RoomVoicePanel({
 
   function handleLeaveVoice() {
     controller.leave(roomSlug);
+    processedSignalCount.current = 0;
     setJoinedVoice(false);
   }
 
@@ -164,7 +173,7 @@ function VoiceParticipantRow({
               value={settings.volume}
             />
           </label>
-          <audio ref={(audio) => {
+          <audio autoPlay ref={(audio) => {
             if (audio) {
               onAudioElement(participant.connectionId, audio);
             }

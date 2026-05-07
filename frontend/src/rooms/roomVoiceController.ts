@@ -4,6 +4,7 @@ type MinimalAudioContext = {
   createMediaStreamSource(stream: MediaStream): MediaStreamAudioSourceNode;
   createGain(): GainNode;
   createMediaStreamDestination(): MediaStreamAudioDestinationNode;
+  resume?: () => Promise<void>;
   close(): Promise<void>;
 };
 
@@ -39,6 +40,8 @@ export function createRoomVoiceController({
   let micGain: GainNode | null = null;
   const peers = new Map<string, RTCPeerConnection>();
   const remoteAudio = new Map<string, HTMLAudioElement>();
+  const remoteStreams = new Map<string, MediaStream>();
+  let activeRemoteConnectionIds = new Set<string>();
 
   const controller: RoomVoiceController = {
     get localStream() {
@@ -47,6 +50,7 @@ export function createRoomVoiceController({
     async join(roomSlug) {
       inputStream = await mediaDevices.getUserMedia({ audio: true });
       audioContext = audioContextFactory();
+      await audioContext.resume?.();
       const source = audioContext.createMediaStreamSource(inputStream);
       micGain = audioContext.createGain();
       const destination = audioContext.createMediaStreamDestination();
@@ -68,21 +72,33 @@ export function createRoomVoiceController({
     syncParticipants(roomSlug, participants, selfConnectionId) {
       const remoteParticipants = participants.filter((participant) => participant.connectionId !== selfConnectionId);
       const activeIds = new Set(remoteParticipants.map((participant) => participant.connectionId));
+      activeRemoteConnectionIds = activeIds;
       for (const connectionId of peers.keys()) {
         if (!activeIds.has(connectionId)) {
-          peers.get(connectionId)?.close();
+          closePeer(connectionId);
           peers.delete(connectionId);
         }
       }
 
       remoteParticipants.forEach((participant) => {
-        ensurePeer(roomSlug, participant.connectionId);
+        const { created, peer } = ensurePeer(roomSlug, participant.connectionId);
+        if (created && shouldInitiateOffer(selfConnectionId, participant.connectionId)) {
+          void negotiatePeer(roomSlug, participant.connectionId, peer);
+        }
       });
     },
     async handleSignal(roomSlug, voiceSignal) {
-      const peer = ensurePeer(roomSlug, voiceSignal.fromConnectionId);
+      if (!activeRemoteConnectionIds.has(voiceSignal.fromConnectionId)) return;
+
+      const { peer } = ensurePeer(roomSlug, voiceSignal.fromConnectionId);
       const signal = voiceSignal.signal as RTCSessionDescriptionInit | RTCIceCandidateInit;
       if (isSessionDescription(signal)) {
+        if (signal.type === "answer" && peer.signalingState !== "have-local-offer") {
+          return;
+        }
+        if (signal.type === "offer" && peer.signalingState !== "stable") {
+          return;
+        }
         await peer.setRemoteDescription(signal);
         if (signal.type === "offer") {
           const answer = await peer.createAnswer();
@@ -100,6 +116,11 @@ export function createRoomVoiceController({
     },
     attachRemoteAudio(connectionId, audio) {
       remoteAudio.set(connectionId, audio);
+      const stream = remoteStreams.get(connectionId);
+      if (stream) {
+        audio.srcObject = stream;
+        void audio.play().catch(() => undefined);
+      }
     },
     setRemoteMuted(connectionId, muted) {
       const audio = remoteAudio.get(connectionId);
@@ -117,16 +138,19 @@ export function createRoomVoiceController({
       stopLocalMedia();
       closePeers();
       remoteAudio.clear();
+      remoteStreams.clear();
+      activeRemoteConnectionIds = new Set();
     }
   };
 
-  function ensurePeer(roomSlug: string, connectionId: string): RTCPeerConnection {
+  function ensurePeer(roomSlug: string, connectionId: string): { created: boolean; peer: RTCPeerConnection } {
     const existing = peers.get(connectionId);
-    if (existing) return existing;
+    if (existing) return { created: false, peer: existing };
 
     const peer = peerConnectionFactory({ iceServers });
-    processedStream?.getAudioTracks().forEach((track) => {
-      peer.addTrack(track, processedStream as MediaStream);
+    const localStream = streamWithAudioTracks(processedStream) ?? streamWithAudioTracks(inputStream);
+    localStream?.getAudioTracks().forEach((track) => {
+      peer.addTrack(track, localStream);
     });
     peer.onicecandidate = (event) => {
       if (!event.candidate) return;
@@ -138,12 +162,29 @@ export function createRoomVoiceController({
     };
     peer.ontrack = (event) => {
       const audio = remoteAudio.get(connectionId);
+      const stream = event.streams[0] ?? null;
+      if (stream) {
+        remoteStreams.set(connectionId, stream);
+      }
       if (audio) {
-        audio.srcObject = event.streams[0] ?? null;
+        audio.srcObject = stream;
+        void audio.play().catch(() => undefined);
       }
     };
     peers.set(connectionId, peer);
-    return peer;
+    return { created: true, peer };
+  }
+
+  async function negotiatePeer(roomSlug: string, connectionId: string, peer: RTCPeerConnection): Promise<void> {
+    if (peer.signalingState !== "stable") return;
+
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    realtimeClient.sendVoiceSignal({
+      roomSlug,
+      targetConnectionId: connectionId,
+      signal: offer
+    });
   }
 
   function stopLocalMedia() {
@@ -156,11 +197,30 @@ export function createRoomVoiceController({
   }
 
   function closePeers() {
-    peers.forEach((peer) => peer.close());
+    peers.forEach((_peer, connectionId) => closePeer(connectionId));
     peers.clear();
   }
 
+  function closePeer(connectionId: string) {
+    peers.get(connectionId)?.close();
+    remoteStreams.delete(connectionId);
+    const audio = remoteAudio.get(connectionId);
+    if (audio) {
+      audio.srcObject = null;
+    }
+  }
+
   return controller;
+}
+
+function shouldInitiateOffer(selfConnectionId: string | undefined, remoteConnectionId: string): boolean {
+  if (!selfConnectionId) return false;
+  return selfConnectionId < remoteConnectionId;
+}
+
+function streamWithAudioTracks(stream: MediaStream | null): MediaStream | null {
+  if (!stream || stream.getAudioTracks().length === 0) return null;
+  return stream;
 }
 
 function defaultIceServers(): RTCIceServer[] {

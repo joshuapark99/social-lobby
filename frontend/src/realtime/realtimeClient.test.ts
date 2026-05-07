@@ -445,4 +445,54 @@ describe("createRealtimeClient", () => {
       }
     ]);
   });
+
+  it("queues multiple voice signals instead of overwriting pending signals", () => {
+    let socket: FakeWebSocket | undefined;
+    const client = createRealtimeClient({
+      baseUrl: "/api",
+      webSocketFactory: (url) => {
+        socket = new FakeWebSocket(url);
+        return socket as never;
+      }
+    });
+
+    client.connect("main-lobby");
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "voice.signal",
+        occurredAt: "2026-05-06T10:10:00.000Z",
+        payload: {
+          fromConnectionId: "conn-2",
+          targetConnectionId: "conn-1",
+          signal: { type: "offer", sdp: "fake-sdp" }
+        }
+      })
+    });
+    socket?.emit("message", {
+      data: JSON.stringify({
+        version: 1,
+        type: "voice.signal",
+        occurredAt: "2026-05-06T10:10:01.000Z",
+        payload: {
+          fromConnectionId: "conn-2",
+          targetConnectionId: "conn-1",
+          signal: { candidate: "fake-candidate" }
+        }
+      })
+    });
+
+    expect(client.voice.signals).toEqual([
+      {
+        fromConnectionId: "conn-2",
+        targetConnectionId: "conn-1",
+        signal: { type: "offer", sdp: "fake-sdp" }
+      },
+      {
+        fromConnectionId: "conn-2",
+        targetConnectionId: "conn-1",
+        signal: { candidate: "fake-candidate" }
+      }
+    ]);
+  });
 });

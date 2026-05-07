@@ -260,7 +260,7 @@ export function createRealtimeClient(options: {
             error: null,
             voice: {
               ...client.voice,
-              signals: [signal],
+              signals: [...client.voice.signals, signal],
               error: null
             }
           });
