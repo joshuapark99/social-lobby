@@ -7,6 +7,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     baseUrl: "/api",
     updateProfile: vi.fn(),
+    createCommunity: vi.fn(),
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
@@ -92,6 +93,42 @@ describe("LobbyView", () => {
     expect(await screen.findByRole("navigation", { name: "Communities and rooms" })).toBeInTheDocument();
     expect(await screen.findByText("Default Community")).toBeInTheDocument();
     expect(await screen.findByText("Main Lobby")).toBeInTheDocument();
+  });
+
+  it("creates a community from the add-community workflow", async () => {
+    const createCommunity = vi.fn(async () => ({
+      community: { id: "community-2", slug: "friday-game-night", name: "Friday Game Night", viewerRole: "owner" as const },
+      rooms: [
+        {
+          slug: "main-lobby",
+          name: "Main Lobby",
+          kind: "permanent",
+          isDefault: true,
+          layoutVersion: 1,
+          layout: {
+            theme: "cozy-lobby",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "lobby-furniture-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        }
+      ]
+    }));
+    const onNavigate = vi.fn();
+    render(<LobbyView apiClient={apiClient({ createCommunity })} onNavigate={onNavigate} session={session} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add community" }));
+    fireEvent.change(screen.getByLabelText("Create community"), { target: { value: "Friday Game Night" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() => expect(createCommunity).toHaveBeenCalledWith("Friday Game Night"));
+    expect(await screen.findByText("Friday Game Night")).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenCalledWith("/community/friday-game-night/rooms/main-lobby");
   });
 
   it("lets community owners open settings and assign admins", async () => {

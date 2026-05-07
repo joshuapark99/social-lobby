@@ -9,6 +9,13 @@ export type CommunityMembership = {
   status: "active" | string;
 };
 
+export type CommunitySummary = {
+  id: string;
+  slug: string;
+  name: string;
+  viewerRole?: CommunityRole;
+};
+
 export type CommunityMember = {
   userId: string;
   displayName: string;
@@ -20,6 +27,7 @@ export type CommunityMember = {
 
 export type CommunityAccessStore = {
   defaultCommunity(): Promise<{ id: string; slug: string; name: string }>;
+  createCommunity(input: { actorUserId: string; name: string; slug: string }): Promise<CommunitySummary>;
   membershipForUser(userId: string, communityId: string): Promise<CommunityMembership | null>;
   listMembers(communityId: string): Promise<CommunityMember[]>;
   updateMembershipRole(input: {
@@ -30,6 +38,7 @@ export type CommunityAccessStore = {
 };
 
 export type CommunityAccessService = {
+  createCommunity(input: { actorUserId: string; name: string }): Promise<CommunitySummary>;
   requireCommunityManagement(input: { actorUserId: string; communityId: string }): Promise<void>;
   requireDefaultCommunityManagement(actorUserId: string): Promise<{ id: string; slug: string; name: string }>;
   listCommunityMembers(input: { actorUserId: string; communityId: string }): Promise<CommunityMember[]>;
@@ -48,6 +57,22 @@ export class CommunityAccessError extends Error {
   }
 }
 
+export class CommunityValidationError extends Error {
+  constructor(message = "invalid community") {
+    super(message);
+    this.name = "CommunityValidationError";
+  }
+}
+
+export class CommunitySlugConflictError extends Error {
+  constructor(message = "community slug is already taken") {
+    super(message);
+    this.name = "CommunitySlugConflictError";
+  }
+}
+
+const reservedCommunitySlugs = new Set(["admin", "api", "auth", "community", "communities", "default", "invite", "invites", "rooms"]);
+
 export function createCommunityAccessService(options: { store: CommunityAccessStore }): CommunityAccessService {
   async function requireActiveMembership(input: { actorUserId: string; communityId: string }): Promise<CommunityMembership> {
     const membership = await options.store.membershipForUser(input.actorUserId, input.communityId);
@@ -65,6 +90,11 @@ export function createCommunityAccessService(options: { store: CommunityAccessSt
   }
 
   return {
+    async createCommunity(input) {
+      const name = normalizeCommunityName(input.name);
+      const slug = communitySlugForName(name);
+      return options.store.createCommunity({ actorUserId: input.actorUserId, name, slug });
+    },
     requireCommunityManagement,
     async requireDefaultCommunityManagement(actorUserId) {
       const community = await options.store.defaultCommunity();
@@ -94,6 +124,9 @@ export function createCommunityAccessService(options: { store: CommunityAccessSt
 
 export function disabledCommunityAccessService(): CommunityAccessService {
   return {
+    async createCommunity() {
+      throw new CommunityAccessError("communities are not configured");
+    },
     async requireCommunityManagement() {
       throw new CommunityAccessError("communities are not configured");
     },
@@ -115,4 +148,34 @@ export function canManageCommunity(role: CommunityRole): boolean {
 
 export function isCommunityAccessError(error: unknown): error is CommunityAccessError {
   return error instanceof CommunityAccessError;
+}
+
+export function isCommunityValidationError(error: unknown): error is CommunityValidationError {
+  return error instanceof CommunityValidationError;
+}
+
+export function isCommunitySlugConflictError(error: unknown): error is CommunitySlugConflictError {
+  return error instanceof CommunitySlugConflictError;
+}
+
+export function communitySlugForName(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .replace(/-{2,}/gu, "-");
+
+  if (slug.length < 3) throw new CommunityValidationError("community name must include at least three URL-safe characters");
+  if (reservedCommunitySlugs.has(slug)) throw new CommunityValidationError("community name creates a reserved URL slug");
+  return slug;
+}
+
+function normalizeCommunityName(name: string): string {
+  const normalized = name.trim().replace(/\s+/gu, " ");
+  if (normalized.length < 3) throw new CommunityValidationError("community name must be at least 3 characters");
+  if (normalized.length > 80) throw new CommunityValidationError("community name must be 80 characters or fewer");
+  return normalized;
 }

@@ -13,11 +13,32 @@ export type RealtimeSnapshot = {
   occupants: RealtimeOccupant[];
 };
 
+export type VoiceParticipant = {
+  connectionId: string;
+  userId: string;
+  email: string;
+  name?: string;
+};
+
+export type VoiceSignal = {
+  fromConnectionId: string;
+  targetConnectionId: string;
+  signal: unknown;
+};
+
+export type RealtimeVoiceState = {
+  self: VoiceParticipant | null;
+  participants: VoiceParticipant[];
+  error: string | null;
+  signals: VoiceSignal[];
+};
+
 export type RealtimeState = {
   status: "idle" | "connecting" | "connected" | "error";
   snapshot: RealtimeSnapshot | null;
   messages: RoomChatMessage[];
   error: string | null;
+  voice: RealtimeVoiceState;
 };
 
 export type MovementRequest = {
@@ -36,6 +57,9 @@ export interface RealtimeClient extends RealtimeState {
   requestMovement(input: MovementRequest): void;
   requestTeleport(input: TeleportRequest): void;
   sendChatMessage(input: { roomSlug: string; body: string }): void;
+  joinVoice(input: { roomSlug: string }): void;
+  leaveVoice(input: { roomSlug: string }): void;
+  sendVoiceSignal(input: { roomSlug: string; targetConnectionId: string; signal: unknown }): void;
   subscribe(listener: (state: RealtimeState) => void): () => void;
 }
 
@@ -57,10 +81,14 @@ export function createRealtimeClient(options: {
     snapshot: null,
     messages: [],
     error: null,
+    voice: emptyVoiceState(),
     connect,
     requestMovement,
     requestTeleport,
     sendChatMessage,
+    joinVoice,
+    leaveVoice,
+    sendVoiceSignal,
     subscribe
   };
 
@@ -79,7 +107,7 @@ export function createRealtimeClient(options: {
 
     const socket = webSocketFactory(websocketUrl(options.webSocketBaseUrl ?? options.baseUrl ?? "/api", roomSlug));
     activeSocket = socket;
-    updateState({ status: "connecting", snapshot: null, messages: [], error: null });
+    updateState({ status: "connecting", snapshot: null, messages: [], error: null, voice: emptyVoiceState() });
 
     const handleOpen = () => {
       socket.send(
@@ -105,7 +133,8 @@ export function createRealtimeClient(options: {
             status: "connected",
             snapshot: envelope.payload as unknown as RealtimeSnapshot,
             messages: client.messages,
-            error: null
+            error: null,
+            voice: client.voice
           });
           return;
         }
@@ -119,7 +148,8 @@ export function createRealtimeClient(options: {
               occupants: [...client.snapshot.occupants.filter((candidate) => candidate.connectionId !== occupant.connectionId), occupant]
             },
             messages: client.messages,
-            error: null
+            error: null,
+            voice: client.voice
           });
           return;
         }
@@ -133,7 +163,8 @@ export function createRealtimeClient(options: {
               occupants: client.snapshot.occupants.filter((occupant) => occupant.connectionId !== connectionId)
             },
             messages: client.messages,
-            error: null
+            error: null,
+            voice: client.voice
           });
           return;
         }
@@ -150,7 +181,8 @@ export function createRealtimeClient(options: {
               )
             },
             messages: client.messages,
-            error: null
+            error: null,
+            voice: client.voice
           });
           return;
         }
@@ -161,16 +193,87 @@ export function createRealtimeClient(options: {
             status: client.status === "idle" ? "connected" : client.status,
             snapshot: client.snapshot,
             messages: [...client.messages.filter((candidate) => candidate.id !== message.id), message],
-            error: null
+            error: null,
+            voice: client.voice
+          });
+          return;
+        }
+        case "voice.snapshot": {
+          const payload = envelope.payload as unknown as {
+            self?: VoiceParticipant;
+            participants?: VoiceParticipant[];
+          };
+          updateState({
+            status: client.status,
+            snapshot: client.snapshot,
+            messages: client.messages,
+            error: null,
+            voice: {
+              self: payload.self ?? null,
+              participants: payload.participants ?? [],
+              error: null,
+              signals: client.voice.signals
+            }
+          });
+          return;
+        }
+        case "voice.joined": {
+          const participant = envelope.payload?.participant as VoiceParticipant | undefined;
+          if (!participant) return;
+          updateState({
+            status: client.status,
+            snapshot: client.snapshot,
+            messages: client.messages,
+            error: null,
+            voice: {
+              ...client.voice,
+              participants: [...client.voice.participants.filter((candidate) => candidate.connectionId !== participant.connectionId), participant],
+              error: null
+            }
+          });
+          return;
+        }
+        case "voice.left": {
+          const connectionId = envelope.payload?.connectionId;
+          if (typeof connectionId !== "string") return;
+          updateState({
+            status: client.status,
+            snapshot: client.snapshot,
+            messages: client.messages,
+            error: null,
+            voice: {
+              ...client.voice,
+              self: client.voice.self?.connectionId === connectionId ? null : client.voice.self,
+              participants: client.voice.participants.filter((participant) => participant.connectionId !== connectionId),
+              error: null
+            }
+          });
+          return;
+        }
+        case "voice.signal": {
+          const signal = envelope.payload as unknown as VoiceSignal | undefined;
+          if (!signal) return;
+          updateState({
+            status: client.status,
+            snapshot: client.snapshot,
+            messages: client.messages,
+            error: null,
+            voice: {
+              ...client.voice,
+              signals: [...client.voice.signals, signal],
+              error: null
+            }
           });
           return;
         }
         case "error": {
+          const message = typeof envelope.payload?.message === "string" ? envelope.payload.message : "Realtime connection failed.";
           updateState({
             status: "error",
             snapshot: client.snapshot,
             messages: client.messages,
-            error: typeof envelope.payload?.message === "string" ? envelope.payload.message : "Realtime connection failed."
+            error: message,
+            voice: { ...client.voice, error: message }
           });
         }
       }
@@ -178,11 +281,17 @@ export function createRealtimeClient(options: {
 
     const handleClose = () => {
       if (activeSocket !== socket) return;
-      updateState({ status: "idle", snapshot: null, messages: [], error: null });
+      updateState({ status: "idle", snapshot: null, messages: [], error: null, voice: emptyVoiceState() });
     };
 
     const handleError = () => {
-      updateState({ status: "error", snapshot: client.snapshot, messages: client.messages, error: "Realtime connection failed." });
+      updateState({
+        status: "error",
+        snapshot: client.snapshot,
+        messages: client.messages,
+        error: "Realtime connection failed.",
+        voice: { ...client.voice, error: "Realtime connection failed." }
+      });
     };
 
     socket.addEventListener("open", handleOpen);
@@ -199,7 +308,7 @@ export function createRealtimeClient(options: {
       socket.removeEventListener("close", handleClose);
       socket.removeEventListener("error", handleError);
       socket.close();
-      updateState({ status: "idle", snapshot: null, messages: [], error: null });
+      updateState({ status: "idle", snapshot: null, messages: [], error: null, voice: emptyVoiceState() });
     };
   }
 
@@ -233,15 +342,55 @@ export function createRealtimeClient(options: {
     );
   }
 
+  function joinVoice(input: { roomSlug: string }): void {
+    activeSocket?.send(
+      JSON.stringify({
+        version: 1,
+        type: "voice.join",
+        payload: input
+      })
+    );
+  }
+
+  function leaveVoice(input: { roomSlug: string }): void {
+    activeSocket?.send(
+      JSON.stringify({
+        version: 1,
+        type: "voice.leave",
+        payload: input
+      })
+    );
+  }
+
+  function sendVoiceSignal(input: { roomSlug: string; targetConnectionId: string; signal: unknown }): void {
+    activeSocket?.send(
+      JSON.stringify({
+        version: 1,
+        type: "voice.signal",
+        payload: input
+      })
+    );
+  }
+
   function updateState(nextState: RealtimeState) {
     client.status = nextState.status;
     client.snapshot = nextState.snapshot;
     client.messages = nextState.messages;
     client.error = nextState.error;
+    client.voice = nextState.voice;
     listeners.forEach((listener) => listener({ ...nextState }));
   }
 
   return client;
+}
+
+function emptyVoiceState(): RealtimeVoiceState {
+  return {
+    self: null,
+    participants: [],
+    error: null,
+    signals: []
+  };
 }
 
 function websocketUrl(baseUrl: string, roomSlug: string): string {

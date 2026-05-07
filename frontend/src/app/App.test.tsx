@@ -12,10 +12,19 @@ function realtimeClient(): RealtimeClient {
     snapshot: null,
     messages: [],
     error: null,
+    voice: {
+      self: null,
+      participants: [],
+      error: null,
+      signals: []
+    },
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
     requestTeleport: vi.fn(),
     sendChatMessage: vi.fn(),
+    joinVoice: vi.fn(),
+    leaveVoice: vi.fn(),
+    sendVoiceSignal: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   };
 }
@@ -42,6 +51,7 @@ function renderApp(pathname: string, session: SessionState = { status: "anonymou
   const apiClient = {
     baseUrl: "/api",
     updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
+    createCommunity: vi.fn(),
     redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
@@ -148,6 +158,7 @@ describe("App", () => {
     const apiClient = {
       baseUrl: "/api",
       updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
+      createCommunity: vi.fn(),
       redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
       listCommunityMembers: vi.fn(async () => ({ members: [] })),
       updateCommunityMemberRole: vi.fn(),
@@ -215,6 +226,7 @@ describe("App", () => {
     const apiClient = {
       baseUrl: "/api",
       updateProfile: vi.fn(),
+      createCommunity: vi.fn(),
       redeemInvite: vi.fn(),
       listCommunityMembers: vi.fn(async () => ({ members: [] })),
       updateCommunityMemberRole: vi.fn(),
@@ -250,6 +262,7 @@ describe("App", () => {
     const apiClient = {
       baseUrl: "/api",
       updateProfile: vi.fn(),
+      createCommunity: vi.fn(),
       redeemInvite: vi.fn(),
       listCommunityMembers: vi.fn(async () => ({ members: [] })),
       updateCommunityMemberRole: vi.fn(),
@@ -285,6 +298,7 @@ describe("App", () => {
         apiClient={{
           baseUrl: "/api",
           updateProfile: vi.fn(async () => ({ displayName: "June", username: "June" })),
+          createCommunity: vi.fn(),
           redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
           listCommunityMembers: vi.fn(async () => ({ members: [] })),
           updateCommunityMemberRole: vi.fn(),
@@ -316,6 +330,7 @@ describe("App", () => {
         apiClient={{
           baseUrl: "/api",
           updateProfile: vi.fn(),
+          createCommunity: vi.fn(),
           redeemInvite: vi.fn(),
           listCommunityMembers: vi.fn(async () => ({ members: [] })),
           updateCommunityMemberRole: vi.fn(),
@@ -386,6 +401,7 @@ describe("App", () => {
     const apiClient = {
       baseUrl: "/api",
       updateProfile: vi.fn(),
+      createCommunity: vi.fn(),
       redeemInvite: vi.fn(),
       listCommunityMembers: vi.fn(async () => ({ members: [] })),
       updateCommunityMemberRole: vi.fn(),
@@ -468,7 +484,13 @@ describe("App", () => {
           ]
         },
         messages: [],
-        error: null
+        error: null,
+        voice: {
+          self: null,
+          participants: [],
+          error: null,
+          signals: []
+        }
       });
     });
 

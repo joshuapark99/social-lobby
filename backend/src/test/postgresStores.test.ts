@@ -8,6 +8,8 @@ import { PostgresCommunityAccessStore } from "../communities/postgresStore.js";
 import { createCommunityAccessService } from "../communities/service.js";
 import { PostgresInviteStore } from "../invites/postgresStore.js";
 import { createInviteService } from "../invites/service.js";
+import { PostgresRoomStore } from "../rooms/postgresStore.js";
+import { createRoomService } from "../rooms/service.js";
 import { PostgresTeleportStore } from "../teleport/postgresStore.js";
 import { prepareTestDatabase, withLockedTestDatabase, withTestPool } from "./testDatabase.js";
 
@@ -104,6 +106,31 @@ describe.sequential("postgres-backed integration paths", () => {
             communityId: "00000000-0000-4000-8000-000000000001"
           })
         ).resolves.toBeUndefined();
+      });
+    });
+  });
+
+  test("creates communities with owner membership and default rooms", async () => {
+    await withLockedTestDatabase(async () => {
+      await prepareTestDatabase();
+
+      await withTestPool(async (pool) => {
+        const owner = await insertUser(pool, { displayName: "Owner", email: "creator@example.com", subject: "creator-subject" });
+        const communityService = createCommunityAccessService({ store: new PostgresCommunityAccessStore(pool) });
+        const roomService = createRoomService({ store: new PostgresRoomStore(pool) });
+
+        const community = await communityService.createCommunity({ actorUserId: owner.id, name: "Friday Game Night" });
+        const rooms = await roomService.listCommunityRoomsById(community.id, owner.id);
+
+        expect(community).toMatchObject({ name: "Friday Game Night", slug: "friday-game-night", viewerRole: "owner" });
+        expect(rooms?.community).toMatchObject({ id: community.id, slug: "friday-game-night", viewerRole: "owner" });
+        expect(rooms?.rooms.map((room) => ({ slug: room.slug, isDefault: room.isDefault }))).toEqual([
+          { slug: "main-lobby", isDefault: true },
+          { slug: "rooftop", isDefault: false }
+        ]);
+        await expect(communityService.createCommunity({ actorUserId: owner.id, name: "Friday Game Night" })).rejects.toThrow(
+          "community slug is already taken"
+        );
       });
     });
   });

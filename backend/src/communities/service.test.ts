@@ -1,9 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { createCommunityAccessService, type CommunityAccessStore, type CommunityMembership } from "./service.js";
+import {
+  communitySlugForName,
+  createCommunityAccessService,
+  type CommunityAccessStore,
+  type CommunityMembership
+} from "./service.js";
 
 function store(memberships: CommunityMembership[]): CommunityAccessStore {
   return {
     defaultCommunity: async () => ({ id: "community-1", slug: "default-community", name: "Default Community" }),
+    createCommunity: async (input) => ({
+      id: "created-community",
+      slug: input.slug,
+      name: input.name,
+      viewerRole: "owner"
+    }),
     membershipForUser: async (userId, communityId) =>
       memberships.find((membership) => membership.userId === userId && membership.communityId === communityId) ?? null,
     listMembers: async (communityId) =>
@@ -33,6 +44,30 @@ function store(memberships: CommunityMembership[]): CommunityAccessStore {
 }
 
 describe("community access service", () => {
+  test("normalizes community names into URL-safe slugs", async () => {
+    const created: Array<{ name: string; slug: string }> = [];
+    const service = createCommunityAccessService({
+      store: {
+        ...store([]),
+        createCommunity: async (input) => {
+          created.push({ name: input.name, slug: input.slug });
+          return { id: "community-2", name: input.name, slug: input.slug, viewerRole: "owner" };
+        }
+      }
+    });
+
+    await expect(service.createCommunity({ actorUserId: "owner-1", name: "  Friday Game Night!  " })).resolves.toMatchObject({
+      slug: "friday-game-night",
+      viewerRole: "owner"
+    });
+    expect(created).toEqual([{ name: "Friday Game Night!", slug: "friday-game-night" }]);
+  });
+
+  test("rejects community names that create invalid or reserved slugs", () => {
+    expect(() => communitySlugForName("API")).toThrow("reserved URL slug");
+    expect(() => communitySlugForName("!!")).toThrow("at least three URL-safe characters");
+  });
+
   test("allows owners and admins to manage a community", async () => {
     const service = createCommunityAccessService({
       store: store([

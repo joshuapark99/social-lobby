@@ -9,6 +9,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     baseUrl: "/api",
     updateProfile: vi.fn(),
+    createCommunity: vi.fn(),
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
@@ -92,10 +93,19 @@ function realtimeClient(state: Partial<RealtimeState> = {}): RealtimeClient {
     snapshot: state.snapshot ?? null,
     error: state.error ?? null,
     messages: state.messages ?? [],
+    voice: state.voice ?? {
+      self: null,
+      participants: [],
+      error: null,
+      signals: []
+    },
     connect: vi.fn(() => () => undefined),
     requestMovement: vi.fn(),
     requestTeleport: vi.fn(),
     sendChatMessage: vi.fn(),
+    joinVoice: vi.fn(),
+    leaveVoice: vi.fn(),
+    sendVoiceSignal: vi.fn(),
     subscribe: vi.fn(() => () => undefined)
   } as RealtimeClient & { requestTeleport: ReturnType<typeof vi.fn> };
 }
@@ -345,5 +355,51 @@ describe("RoomView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Join room" }));
     expect(await screen.findByRole("listitem")).toHaveTextContent("Other Person");
     expect(screen.getByRole("listitem")).toHaveTextContent("Realtime hello");
+  });
+
+  it("keeps room voice controls disabled until the user joins the room", async () => {
+    render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
+
+    expect(await screen.findByRole("button", { name: "Join voice" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Join room" }));
+
+    expect(await screen.findByRole("button", { name: "Join voice" })).toBeEnabled();
+  });
+
+  it("renders active voice members below the room view", async () => {
+    render(
+      <RoomView
+        apiClient={apiClient()}
+        realtimeClient={realtimeClient({
+          voice: {
+            self: {
+              connectionId: "conn-1",
+              userId: "user-1",
+              email: "person@example.com"
+            },
+            participants: [
+              {
+                connectionId: "conn-1",
+                userId: "user-1",
+                email: "person@example.com"
+              },
+              {
+                connectionId: "conn-2",
+                userId: "user-2",
+                email: "other@example.com",
+                name: "Other Person"
+              }
+            ],
+            error: null,
+            signals: []
+          }
+        })}
+        roomSlug="main-lobby"
+      />
+    );
+
+    expect(await screen.findByRole("region", { name: "Room voice" })).toBeInTheDocument();
+    expect(screen.getByText("person@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Other Person")).toBeInTheDocument();
   });
 });
