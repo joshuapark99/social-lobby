@@ -63,7 +63,7 @@ export function buildServer(options: {
 
   registerHealthRoutes(server, { observability, readinessCheck });
   registerAuthRoutes(server, { config: options.config, authService });
-  registerCommunityRoutes(server, { authService, communityAccessService });
+  registerCommunityRoutes(server, { authService, communityAccessService, roomService });
   registerInviteRoutes(server, { authService, inviteService, communityAccessService });
   registerRoomRoutes(server, { authService, roomService, chatService });
   void server.register(async (instance) => {

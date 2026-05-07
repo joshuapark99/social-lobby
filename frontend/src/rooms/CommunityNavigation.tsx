@@ -21,6 +21,8 @@ export function CommunityNavigation({
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [membersStatus, setMembersStatus] = useState<"idle" | "loading" | "saving" | "error">("idle");
+  const [communityName, setCommunityName] = useState("");
+  const [createStatus, setCreateStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteStatus, setInviteStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -134,6 +136,36 @@ export function CommunityNavigation({
     } catch (error) {
       setInviteStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to redeem invite.");
+    }
+  }
+
+  async function submitCommunity(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = communityName.trim();
+    if (!name) return;
+
+    setCreateStatus("submitting");
+    setMessage("");
+
+    try {
+      const createdCommunity = await apiClient.createCommunity(name);
+      setCommunities((current) => ({
+        communities: [
+          ...current.communities.filter((community) => community.community.id !== createdCommunity.community.id),
+          createdCommunity
+        ]
+      }));
+      setCommunityName("");
+      setAddCommunityOpen(false);
+      setCreateStatus("success");
+      setSelectedCommunitySlug(createdCommunity.community.slug);
+      setMessage("Community created.");
+
+      const defaultRoom = createdCommunity.rooms.find((room) => room.isDefault) ?? createdCommunity.rooms[0];
+      if (defaultRoom) navigateToRoom(createdCommunity, defaultRoom.slug);
+    } catch (error) {
+      setCreateStatus("error");
+      setMessage(error instanceof Error ? error.message : "Unable to create community.");
     }
   }
 
@@ -270,24 +302,47 @@ export function CommunityNavigation({
           </section>
         ) : null}
         {addCommunityOpen ? (
-          <form className="community-nav__invite" onSubmit={submitInvite}>
-            <label htmlFor="community-invite-code">Invite code</label>
-            <div>
-              <input
-                autoFocus
-                id="community-invite-code"
-                onChange={(event) => setInviteCode(event.target.value)}
-                placeholder="Paste invite code"
-                value={inviteCode}
-              />
-              <button disabled={inviteStatus === "submitting" || inviteCode.trim() === ""} type="submit">
-                Redeem
-              </button>
-            </div>
-            {message ? <p className={inviteStatus === "error" ? "form-message form-message-error" : "form-message"}>{message}</p> : null}
-          </form>
+          <section className="community-nav__add-panel" aria-label="Add community">
+            <form className="community-nav__invite" onSubmit={submitCommunity}>
+              <label htmlFor="community-name">Create community</label>
+              <div>
+                <input
+                  autoFocus
+                  id="community-name"
+                  maxLength={80}
+                  onChange={(event) => setCommunityName(event.target.value)}
+                  placeholder="Community name"
+                  value={communityName}
+                />
+                <button disabled={createStatus === "submitting" || communityName.trim() === ""} type="submit">
+                  Create
+                </button>
+              </div>
+            </form>
+            <form className="community-nav__invite" onSubmit={submitInvite}>
+              <label htmlFor="community-invite-code">Join with invite</label>
+              <div>
+                <input
+                  id="community-invite-code"
+                  onChange={(event) => setInviteCode(event.target.value)}
+                  placeholder="Paste invite code"
+                  value={inviteCode}
+                />
+                <button disabled={inviteStatus === "submitting" || inviteCode.trim() === ""} type="submit">
+                  Redeem
+                </button>
+              </div>
+            </form>
+            {message ? (
+              <p className={createStatus === "error" || inviteStatus === "error" ? "form-message form-message-error" : "form-message"}>
+                {message}
+              </p>
+            ) : null}
+          </section>
         ) : message ? (
-          <p className={inviteStatus === "error" ? "form-message form-message-error" : "form-message"}>{message}</p>
+          <p className={createStatus === "error" || inviteStatus === "error" ? "form-message form-message-error" : "form-message"}>
+            {message}
+          </p>
         ) : null}
       </div>
     </nav>

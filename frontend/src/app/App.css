@@ -598,10 +598,17 @@ h3 {
   color: #fff7ea;
 }
 
-.community-nav__invite {
+.community-nav__add-panel {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 16px;
   margin-top: 24px;
   padding-top: 18px;
+}
+
+.community-nav__invite {
+  display: grid;
+  gap: 8px;
 }
 
 .community-nav__invite div {

@@ -19,6 +19,7 @@ export class ApiError extends Error {
 export interface ApiClient {
   readonly baseUrl: string;
   updateProfile(username: string): Promise<{ displayName: string; username: string }>;
+  createCommunity(name: string): Promise<RoomListResponse>;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
   listCommunities(): Promise<CommunityRoomsResponse>;
   listCommunityMembers(communityId: string): Promise<CommunityMembersResponse>;
@@ -49,6 +50,24 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
       }
 
       return (await response.json()) as { displayName: string; username: string };
+    },
+    async createCommunity(name: string) {
+      const response = await fetch(`${baseUrl}/communities`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...csrfHeader()
+        },
+        body: JSON.stringify({ name })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to create community." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to create community.", response.status);
+      }
+
+      return (await response.json()) as RoomListResponse;
     },
     async redeemInvite(code: string) {
       const response = await fetch(`${baseUrl}/invites/redeem`, {

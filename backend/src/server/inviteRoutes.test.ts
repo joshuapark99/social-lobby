@@ -33,6 +33,7 @@ function inviteService(overrides: Partial<InviteService> = {}): InviteService {
 
 function communityAccessService(overrides: Partial<CommunityAccessService> = {}): CommunityAccessService {
   return {
+    createCommunity: vi.fn(),
     requireCommunityManagement: vi.fn(),
     requireDefaultCommunityManagement: vi.fn(async () => ({
       id: "community-1",

@@ -1,5 +1,12 @@
 import type { Pool } from "pg";
-import type { CommunityAccessStore, CommunityMember, CommunityMembership, CommunityRole } from "./service.js";
+import {
+  CommunitySlugConflictError,
+  type CommunityAccessStore,
+  type CommunityMember,
+  type CommunityMembership,
+  type CommunityRole,
+  type CommunitySummary
+} from "./service.js";
 
 export class PostgresCommunityAccessStore implements CommunityAccessStore {
   constructor(private readonly pool: Pool) {}
@@ -11,6 +18,57 @@ export class PostgresCommunityAccessStore implements CommunityAccessStore {
     const community = result.rows[0];
     if (!community) throw new Error("default community is not configured");
     return community;
+  }
+
+  async createCommunity(input: { actorUserId: string; name: string; slug: string }): Promise<CommunitySummary> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const communityResult = await client.query<{ id: string; slug: string; name: string }>(
+        `INSERT INTO communities (slug, name)
+         VALUES ($1, $2)
+         ON CONFLICT (slug) DO NOTHING
+         RETURNING id, slug, name`,
+        [input.slug, input.name]
+      );
+      const community = communityResult.rows[0];
+      if (!community) throw new CommunitySlugConflictError();
+
+      await client.query(
+        `INSERT INTO memberships (user_id, community_id, role, status)
+         VALUES ($1, $2, 'owner', 'active')`,
+        [input.actorUserId, community.id]
+      );
+      const mainLobbyResult = await client.query(
+        `INSERT INTO rooms (community_id, layout_id, slug, name, kind, is_default)
+         SELECT $1, room_layouts.id, 'main-lobby', 'Main Lobby', 'permanent', true
+         FROM room_layouts
+         WHERE room_layouts.slug = 'main-lobby'
+         ORDER BY room_layouts.version DESC
+         LIMIT 1`,
+        [community.id]
+      );
+      const rooftopResult = await client.query(
+        `INSERT INTO rooms (community_id, layout_id, slug, name, kind, is_default)
+         SELECT $1, room_layouts.id, 'rooftop', 'Rooftop', 'permanent', false
+         FROM room_layouts
+         WHERE room_layouts.slug = 'rooftop'
+         ORDER BY room_layouts.version DESC
+         LIMIT 1`,
+        [community.id]
+      );
+      if (mainLobbyResult.rowCount !== 1 || rooftopResult.rowCount !== 1) {
+        throw new Error("default community room layouts are not configured");
+      }
+
+      await client.query("COMMIT");
+      return { ...community, viewerRole: "owner" };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async membershipForUser(userId: string, communityId: string): Promise<CommunityMembership | null> {

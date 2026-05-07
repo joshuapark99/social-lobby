@@ -1,7 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
 import type { AuthService } from "../auth/service.js";
-import { CommunityAccessError, type CommunityAccessService, type CommunityMember } from "../communities/service.js";
+import {
+  CommunityAccessError,
+  CommunitySlugConflictError,
+  type CommunityAccessService,
+  type CommunityMember
+} from "../communities/service.js";
 import { loadConfig } from "../config/config.js";
+import type { RoomService } from "../rooms/service.js";
 import { buildServer } from "./server.js";
 
 function authService(userId = "owner-1", email = "owner@example.com"): AuthService {
@@ -16,6 +22,7 @@ function authService(userId = "owner-1", email = "owner@example.com"): AuthServi
 
 function communityAccessService(overrides: Partial<CommunityAccessService> = {}): CommunityAccessService {
   return {
+    createCommunity: vi.fn(async ({ name }) => ({ id: "community-2", slug: "friday-game-night", name, viewerRole: "owner" as const })),
     requireCommunityManagement: vi.fn(),
     requireDefaultCommunityManagement: vi.fn(),
     listCommunityMembers: vi.fn(async (): Promise<CommunityMember[]> => [
@@ -46,7 +53,93 @@ function communityAccessService(overrides: Partial<CommunityAccessService> = {})
   };
 }
 
+function roomService(overrides: Partial<RoomService> = {}): RoomService {
+  return {
+    listDefaultCommunityRooms: vi.fn(),
+    listUserCommunities: vi.fn(),
+    listCommunityRooms: vi.fn(),
+    listCommunityRoomsById: vi.fn(async () => ({
+      community: { id: "community-2", slug: "friday-game-night", name: "Friday Game Night", viewerRole: "owner" as const },
+      rooms: [
+        {
+          slug: "main-lobby",
+          name: "Main Lobby",
+          kind: "permanent",
+          isDefault: true,
+          layoutVersion: 1,
+          layout: {
+            theme: "cozy-lobby",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "lobby-furniture-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: [{ label: "Rooftop", targetRoom: "rooftop" }]
+          }
+        }
+      ]
+    })),
+    roomBySlug: vi.fn(),
+    roomByCommunitySlug: vi.fn(),
+    roomByCommunityId: vi.fn(),
+    ...overrides
+  };
+}
+
 describe("community routes", () => {
+  test("creates a community for the authenticated owner", async () => {
+    const access = communityAccessService();
+    const rooms = roomService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("owner-1"),
+      communityAccessService: access,
+      roomService: rooms
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "api/communities",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { name: "Friday Game Night" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      community: { id: "community-2", slug: "friday-game-night", name: "Friday Game Night", viewerRole: "owner" },
+      rooms: [{ slug: "main-lobby", isDefault: true }]
+    });
+    expect(access.createCommunity).toHaveBeenCalledWith({ actorUserId: "owner-1", name: "Friday Game Night" });
+    expect(rooms.listCommunityRoomsById).toHaveBeenCalledWith("community-2", "owner-1");
+  });
+
+  test("returns a clear conflict when a generated community slug already exists", async () => {
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("owner-1"),
+      communityAccessService: communityAccessService({
+        createCommunity: vi.fn(async () => {
+          throw new CommunitySlugConflictError();
+        })
+      }),
+      roomService: roomService()
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "api/communities",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { name: "Default Community" }
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "community slug is already taken" });
+  });
+
   test("community members can list members", async () => {
     const access = communityAccessService();
     const server = buildServer({
