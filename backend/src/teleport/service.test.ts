@@ -11,6 +11,7 @@ function roomService(): RoomService {
     roomByCommunitySlug: vi.fn(),
     roomByCommunityId: vi.fn(),
     createCommunityRoom: vi.fn(),
+    updateCommunityRoomTables: vi.fn(),
     roomBySlug: vi.fn(async (roomSlug: string, _userId: string) =>
       roomSlug === "main-lobby"
         ? {

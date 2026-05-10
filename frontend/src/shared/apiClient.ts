@@ -7,6 +7,7 @@ import type {
   RoomDetailResponse,
   RoomListResponse
 } from "../rooms/api";
+import type { RoomTable } from "../rooms/api";
 
 export class ApiError extends Error {
   constructor(
@@ -23,6 +24,7 @@ export interface ApiClient {
   updateProfile(username: string): Promise<{ displayName: string; username: string }>;
   createCommunity(name: string): Promise<RoomListResponse>;
   createCommunityRoom(communityId: string, name: string): Promise<RoomListResponse>;
+  updateCommunityRoomTables(communityId: string, roomSlug: string, tables: RoomTable[]): Promise<RoomDetailResponse>;
   redeemInvite(code: string): Promise<{ status: "redeemed" | "already-member"; communityId: string }>;
   listCommunities(): Promise<CommunityRoomsResponse>;
   listCommunityMembers(communityId: string): Promise<CommunityMembersResponse>;
@@ -92,6 +94,24 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
       }
 
       return (await response.json()) as RoomListResponse;
+    },
+    async updateCommunityRoomTables(communityId: string, roomSlug: string, tables: RoomTable[]) {
+      const response = await fetch(`${baseUrl}/communities/${encodeURIComponent(communityId)}/rooms/${encodeURIComponent(roomSlug)}/tables`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...csrfHeader()
+        },
+        body: JSON.stringify({ tables })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to update tables." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to update tables.", response.status);
+      }
+
+      return (await response.json()) as RoomDetailResponse;
     },
     async redeemInvite(code: string) {
       const response = await fetch(`${baseUrl}/invites/redeem`, {

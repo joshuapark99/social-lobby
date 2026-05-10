@@ -3,7 +3,7 @@ import { csrfMatches } from "../auth/cookies.js";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import { isChatAccessError, type ChatService } from "../chat/service.js";
-import { isRoomAccessError, isRoomSlugConflictError, isRoomValidationError, type RoomService } from "./service.js";
+import { isRoomAccessError, isRoomSlugConflictError, isRoomValidationError, type RoomService, type RoomTableInput } from "./service.js";
 
 export function registerRoomRoutes(
   server: FastifyInstance,
@@ -65,6 +65,29 @@ export function registerRoomRoutes(
       return reply.status(500).send({ error: errorMessage(error) });
     }
   });
+
+  server.put<{ Params: { communityId: string; roomSlug: string }; Body: { tables?: RoomTableInput[] } }>(
+    "/api/communities/:communityId/rooms/:roomSlug/tables",
+    async (request, reply) => {
+      if (!csrfMatches(request)) return reply.status(403).send({ error: "csrf token mismatch" });
+      const identity = await requireIdentity(request, reply, options.authService);
+      if (!identity) return reply;
+
+      try {
+        const room = await options.roomService.updateCommunityRoomTables({
+          actorUserId: identity.userId,
+          communityId: request.params.communityId,
+          roomSlug: request.params.roomSlug,
+          tables: Array.isArray(request.body?.tables) ? request.body.tables : []
+        });
+        return reply.status(200).send(room);
+      } catch (error) {
+        if (isRoomAccessError(error)) return reply.status(403).send({ error: error.message });
+        if (isRoomValidationError(error)) return reply.status(400).send({ error: error.message });
+        return reply.status(500).send({ error: errorMessage(error) });
+      }
+    }
+  );
 
   server.post<{ Params: { communityId: string }; Body: { name?: string } }>("/api/communities/:communityId/rooms", async (request, reply) => {
     if (!csrfMatches(request)) return reply.status(403).send({ error: "csrf token mismatch" });

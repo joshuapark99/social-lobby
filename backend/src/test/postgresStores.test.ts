@@ -136,6 +136,37 @@ describe.sequential("postgres-backed integration paths", () => {
     });
   });
 
+  test("persists room table placement in a new room layout version", async () => {
+    await withLockedTestDatabase(async () => {
+      await prepareTestDatabase();
+
+      await withTestPool(async (pool) => {
+        const owner = await insertUser(pool, { displayName: "Owner", email: "tables@example.com", subject: "tables-subject" });
+        await addMembership(pool, owner.id, undefined, "owner");
+        const roomService = createRoomService({ store: new PostgresRoomStore(pool) });
+
+        const updatedRoom = await roomService.updateCommunityRoomTables({
+          actorUserId: owner.id,
+          communityId: "00000000-0000-4000-8000-000000000001",
+          roomSlug: "main-lobby",
+          tables: [{ id: "table-1", label: "Strategy Table", x: 640, y: 520, seats: 6 }]
+        });
+
+        expect(updatedRoom.room.layoutVersion).toBe(2);
+        expect(updatedRoom.room.layout.tables).toEqual([
+          { id: "table-1", label: "Strategy Table", x: 640, y: 520, w: 320, h: 180, seats: 6 }
+        ]);
+
+        const reloadedRoom = await roomService.roomByCommunityId(
+          "00000000-0000-4000-8000-000000000001",
+          "main-lobby",
+          owner.id
+        );
+        expect(reloadedRoom?.room.layout.tables).toEqual(updatedRoom.room.layout.tables);
+      });
+    });
+  });
+
   test("persists room chat history for active community members", async () => {
     await withLockedTestDatabase(async () => {
       await prepareTestDatabase();

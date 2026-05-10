@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { parseRoomLayout, type RoomLayout } from "../layouts/layout.js";
 import { canManageCommunity, type CommunityRole } from "../communities/service.js";
 
@@ -44,6 +45,16 @@ export type RoomRow = {
   layoutJson: unknown;
 };
 
+export type RoomTableInput = {
+  id?: string;
+  label: string;
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  seats: number;
+};
+
 export type RoomStore = {
   defaultCommunity(): Promise<{ id: string; slug: string; name: string }>;
   communitiesForUser(userId: string): Promise<CommunitySummary[]>;
@@ -55,6 +66,7 @@ export type RoomStore = {
   roomByCommunitySlug(communitySlug: string, roomSlug: string): Promise<RoomRow | null>;
   roomByCommunityId(communityId: string, roomSlug: string): Promise<RoomRow | null>;
   createRoom(input: { communityId: string; slug: string; name: string; layout: RoomLayout }): Promise<RoomRow>;
+  updateRoomLayout(input: { roomId: string; layout: RoomLayout }): Promise<RoomRow>;
 };
 
 export type RoomService = {
@@ -66,6 +78,12 @@ export type RoomService = {
   roomByCommunitySlug(communitySlug: string, roomSlug: string, userId: string): Promise<RoomMetadataResponse | null>;
   roomByCommunityId(communityId: string, roomSlug: string, userId: string): Promise<RoomMetadataResponse | null>;
   createCommunityRoom(input: { actorUserId: string; communityId: string; name: string }): Promise<RoomListResponse>;
+  updateCommunityRoomTables(input: {
+    actorUserId: string;
+    communityId: string;
+    roomSlug: string;
+    tables: RoomTableInput[];
+  }): Promise<RoomMetadataResponse>;
 };
 
 export class RoomAccessError extends Error {
@@ -154,6 +172,26 @@ export function createRoomService(options: { store: RoomStore }): RoomService {
       });
 
       return accessibleCommunityRooms(options.store, community, input.actorUserId);
+    },
+    async updateCommunityRoomTables(input) {
+      const row = await options.store.roomByCommunityId(input.communityId, input.roomSlug);
+      if (!row) throw new RoomValidationError("room not found");
+
+      const role = await options.store.activeMembershipRole(input.actorUserId, input.communityId);
+      if (!role || !canManageCommunity(role)) throw new RoomAccessError("community admin role required");
+
+      const communityRows = await options.store.roomsForCommunity(row.communityId);
+      const roomSlugs = communityRows.map((candidate) => candidate.slug);
+      const currentLayout = parseRoomLayout(row.layoutJson, { roomSlugs });
+      const nextLayout = parseRoomLayout(
+        {
+          ...currentLayout,
+          tables: input.tables.map((table, index) => normalizeRoomTable(table, index))
+        },
+        { roomSlugs }
+      );
+      const updatedRow = await options.store.updateRoomLayout({ roomId: row.id, layout: nextLayout });
+      return accessibleRoomMetadata(options.store, updatedRow, input.actorUserId);
     }
   };
 }
@@ -182,6 +220,9 @@ export function disabledRoomService(): RoomService {
       throw new Error("rooms are not configured");
     },
     async createCommunityRoom() {
+      throw new Error("rooms are not configured");
+    },
+    async updateCommunityRoomTables() {
       throw new Error("rooms are not configured");
     }
   };
@@ -241,7 +282,28 @@ function defaultRoomLayout(): RoomLayout {
     height: 1600,
     spawnPoints: [{ x: 320, y: 420 }],
     collision: [],
-    teleports: []
+    teleports: [],
+    tables: []
+  };
+}
+
+function normalizeRoomTable(table: RoomTableInput, index: number): NonNullable<RoomLayout["tables"]>[number] {
+  const label = table.label.trim().replace(/\s+/gu, " ");
+  if (label.length < 1) throw new RoomValidationError(`table ${index + 1} label is required`);
+  if (label.length > 60) throw new RoomValidationError(`table ${index + 1} label must be 60 characters or fewer`);
+  if (!Number.isInteger(table.x) || !Number.isInteger(table.y)) throw new RoomValidationError(`table ${index + 1} position is invalid`);
+  if (!Number.isInteger(table.seats) || table.seats < 1 || table.seats > 12) {
+    throw new RoomValidationError(`table ${index + 1} seats must be between 1 and 12`);
+  }
+
+  return {
+    id: table.id?.trim() || randomUUID(),
+    label,
+    x: table.x,
+    y: table.y,
+    w: table.w ?? 320,
+    h: table.h ?? 180,
+    seats: table.seats
   };
 }
 

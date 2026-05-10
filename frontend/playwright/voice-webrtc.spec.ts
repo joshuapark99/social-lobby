@@ -295,6 +295,7 @@ async function installVoiceHarness(page: Page, broker: VoiceBroker, identity: Vo
         updateProfile: async () => ({ displayName: identity.userName, username: identity.userName }),
         createCommunity: async () => ({ community: { id: "community-2", slug: "new-community", name: "New Community" }, rooms: [] }),
         createCommunityRoom: async () => ({ community: room.community, rooms: [room.room] }),
+        updateCommunityRoomTables: async (_communityId, _roomSlug, tables) => ({ community: { id: "community-1", slug: "default-community", name: "Default Community" }, room: { slug: "main-lobby", name: "Main Lobby", kind: "permanent", isDefault: true, layoutVersion: 2, layout: { theme: "cozy-lobby", backgroundAsset: "rooms/main-lobby.png", avatarStyleSet: "soft-rounded", objectPack: "lobby-furniture-v1", width: 2400, height: 1600, spawnPoints: [{ x: 320, y: 420 }], collision: [], teleports: [], tables } } }),
         redeemInvite: async () => ({ status: "redeemed", communityId: "community-1" }),
         listCommunityMembers: async () => ({ members: [] }),
         updateCommunityMemberRole: async () => ({ userId: identity.userId, communityId: "community-1", role: "member", status: "active" }),

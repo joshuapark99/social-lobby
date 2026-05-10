@@ -205,6 +205,67 @@ export class PostgresRoomStore implements RoomStore {
       client.release();
     }
   }
+
+  async updateRoomLayout(input: { roomId: string; layout: RoomLayout }): Promise<RoomRow> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const currentResult = await client.query<{ layout_slug: string; version: number }>(
+        `SELECT room_layouts.slug AS layout_slug, room_layouts.version
+         FROM rooms
+         INNER JOIN room_layouts ON room_layouts.id = rooms.layout_id
+         WHERE rooms.id = $1
+         LIMIT 1`,
+        [input.roomId]
+      );
+      const currentLayout = currentResult.rows[0];
+      if (!currentLayout) throw new Error("room not found");
+
+      const targetLayoutSlug = currentLayout.layout_slug.startsWith("room:") ? currentLayout.layout_slug : `room:${input.roomId}`;
+      const versionResult = await client.query<{ version: number | null }>(
+        "SELECT max(version) AS version FROM room_layouts WHERE slug = $1",
+        [targetLayoutSlug]
+      );
+      const nextVersion = (versionResult.rows[0]?.version ?? currentLayout.version) + 1;
+      const layoutResult = await client.query<{ id: string }>(
+        `INSERT INTO room_layouts (slug, version, layout_json)
+         VALUES ($1, $2, $3::jsonb)
+         RETURNING id`,
+        [targetLayoutSlug, nextVersion, JSON.stringify(input.layout)]
+      );
+      const layoutId = layoutResult.rows[0]?.id;
+      if (!layoutId) throw new Error("room layout was not created");
+
+      const roomResult = await client.query<RoomQueryRow>(
+        `UPDATE rooms
+         SET layout_id = $2,
+             updated_at = now()
+         WHERE rooms.id = $1
+         RETURNING
+           rooms.id,
+           rooms.community_id,
+           (SELECT slug FROM communities WHERE communities.id = rooms.community_id) AS community_slug,
+           (SELECT name FROM communities WHERE communities.id = rooms.community_id) AS community_name,
+           rooms.slug,
+           rooms.name,
+           rooms.kind,
+           rooms.is_default,
+           $3::integer AS layout_version,
+           $4::jsonb AS layout_json`,
+        [input.roomId, layoutId, nextVersion, JSON.stringify(input.layout)]
+      );
+      const room = roomResult.rows[0];
+      if (!room) throw new Error("room not found");
+
+      await client.query("COMMIT");
+      return toRoomRow(room);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 type RoomQueryRow = {
