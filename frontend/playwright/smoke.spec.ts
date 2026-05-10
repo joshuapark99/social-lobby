@@ -173,6 +173,7 @@ async function installAppHarness(page: Parameters<typeof test>[0]["page"], optio
         baseUrl: "/api",
         updateProfile: async () => ({ displayName: "June", username: "June" }),
         createCommunity: async () => ({ community: { id: "community-2", slug: "new-community", name: "New Community" }, rooms: [] }),
+        createCommunityRoom: async () => ({ community: { id: "community-1", slug: "default-community", name: "Default Community" }, rooms: [] }),
         redeemInvite: async () => ({ status: "redeemed", communityId: "community-1" }),
         listCommunities: async () => ({
           communities: [

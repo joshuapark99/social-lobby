@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type { CommunityRole } from "../communities/service.js";
+import type { RoomLayout } from "../layouts/layout.js";
 import type { CommunitySummary, RoomRow, RoomStore } from "./service.js";
 
 export class PostgresRoomStore implements RoomStore {
@@ -161,6 +162,48 @@ export class PostgresRoomStore implements RoomStore {
     );
 
     return result.rows[0] ? toRoomRow(result.rows[0]) : null;
+  }
+
+  async createRoom(input: { communityId: string; slug: string; name: string; layout: RoomLayout }): Promise<RoomRow> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const layoutResult = await client.query<{ id: string }>(
+        `INSERT INTO room_layouts (slug, version, layout_json)
+         VALUES ($1, 1, $2::jsonb)
+         RETURNING id`,
+        [`${input.communityId}:${input.slug}`, JSON.stringify(input.layout)]
+      );
+      const layoutId = layoutResult.rows[0]?.id;
+      if (!layoutId) throw new Error("room layout was not created");
+
+      const roomResult = await client.query<RoomQueryRow>(
+        `INSERT INTO rooms (community_id, layout_id, slug, name, kind, is_default)
+         VALUES ($1, $2, $3, $4, 'permanent', false)
+         RETURNING
+           rooms.id,
+           rooms.community_id,
+           (SELECT slug FROM communities WHERE communities.id = rooms.community_id) AS community_slug,
+           (SELECT name FROM communities WHERE communities.id = rooms.community_id) AS community_name,
+           rooms.slug,
+           rooms.name,
+           rooms.kind,
+           rooms.is_default,
+           1 AS layout_version,
+           $5::jsonb AS layout_json`,
+        [input.communityId, layoutId, input.slug, input.name, JSON.stringify(input.layout)]
+      );
+      const room = roomResult.rows[0];
+      if (!room) throw new Error("room was not created");
+
+      await client.query("COMMIT");
+      return toRoomRow(room);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 

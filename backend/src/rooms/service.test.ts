@@ -131,6 +131,18 @@ function roomStore(overrides: Partial<RoomStore> = {}): RoomStore {
             }
           }
         : null,
+    createRoom: async (input) => ({
+      id: "room-3",
+      communityId: input.communityId,
+      communitySlug: "default-community",
+      communityName: "Default Community",
+      slug: input.slug,
+      name: input.name,
+      kind: "permanent",
+      isDefault: false,
+      layoutVersion: 1,
+      layoutJson: input.layout
+    }),
     ...overrides
   };
 }
@@ -264,5 +276,94 @@ describe("room service", () => {
 
     await expect(service.listDefaultCommunityRooms("user-1")).rejects.toThrow("room access denied");
     await expect(service.roomBySlug("main-lobby", "user-1")).rejects.toThrow("room access denied");
+  });
+
+  test("creates a community room with a generated slug and empty default layout for managers", async () => {
+    const store = roomStore({
+      activeMembershipRole: async () => "admin",
+      roomByCommunityId: async () => null,
+      roomsForCommunity: async () => [
+        {
+          id: "room-1",
+          communityId: "community-1",
+          communitySlug: "default-community",
+          communityName: "Default Community",
+          slug: "main-lobby",
+          name: "Main Lobby",
+          kind: "permanent",
+          isDefault: true,
+          layoutVersion: 1,
+          layoutJson: {
+            theme: "cozy-lobby",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "lobby-furniture-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        },
+        {
+          id: "room-3",
+          communityId: "community-1",
+          communitySlug: "default-community",
+          communityName: "Default Community",
+          slug: "board-game-room",
+          name: "Board Game Room",
+          kind: "permanent",
+          isDefault: false,
+          layoutVersion: 1,
+          layoutJson: {
+            theme: "community-room",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "empty-room-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        }
+      ]
+    });
+    const service = createRoomService({ store });
+
+    await expect(
+      service.createCommunityRoom({ actorUserId: "admin-1", communityId: "community-1", name: " Board Game Room " })
+    ).resolves.toEqual({
+      community: {
+        id: "community-1",
+        slug: "default-community",
+        name: "Default Community",
+        viewerRole: "admin"
+      },
+      rooms: [
+        expect.objectContaining({ slug: "main-lobby", name: "Main Lobby" }),
+        expect.objectContaining({
+          slug: "board-game-room",
+          name: "Board Game Room",
+          isDefault: false,
+          layout: expect.objectContaining({
+            theme: "community-room",
+            teleports: []
+          })
+        })
+      ]
+    });
+  });
+
+  test("rejects room creation for regular members and duplicate slugs", async () => {
+    const memberService = createRoomService({ store: roomStore({ activeMembershipRole: async () => "member" }) });
+    await expect(
+      memberService.createCommunityRoom({ actorUserId: "member-1", communityId: "community-1", name: "Board Game Room" })
+    ).rejects.toThrow("community admin role required");
+
+    const duplicateService = createRoomService({ store: roomStore({ activeMembershipRole: async () => "owner" }) });
+    await expect(
+      duplicateService.createCommunityRoom({ actorUserId: "owner-1", communityId: "community-1", name: "Main Lobby" })
+    ).rejects.toThrow("room slug is already taken");
   });
 });

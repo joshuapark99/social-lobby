@@ -1,5 +1,5 @@
 import { parseRoomLayout, type RoomLayout } from "../layouts/layout.js";
-import type { CommunityRole } from "../communities/service.js";
+import { canManageCommunity, type CommunityRole } from "../communities/service.js";
 
 export type CommunitySummary = {
   id: string;
@@ -54,6 +54,7 @@ export type RoomStore = {
   roomBySlug(roomSlug: string): Promise<RoomRow | null>;
   roomByCommunitySlug(communitySlug: string, roomSlug: string): Promise<RoomRow | null>;
   roomByCommunityId(communityId: string, roomSlug: string): Promise<RoomRow | null>;
+  createRoom(input: { communityId: string; slug: string; name: string; layout: RoomLayout }): Promise<RoomRow>;
 };
 
 export type RoomService = {
@@ -64,12 +65,27 @@ export type RoomService = {
   roomBySlug(roomSlug: string, userId: string): Promise<RoomMetadataResponse | null>;
   roomByCommunitySlug(communitySlug: string, roomSlug: string, userId: string): Promise<RoomMetadataResponse | null>;
   roomByCommunityId(communityId: string, roomSlug: string, userId: string): Promise<RoomMetadataResponse | null>;
+  createCommunityRoom(input: { actorUserId: string; communityId: string; name: string }): Promise<RoomListResponse>;
 };
 
 export class RoomAccessError extends Error {
   constructor(message = "room access denied") {
     super(message);
     this.name = "RoomAccessError";
+  }
+}
+
+export class RoomValidationError extends Error {
+  constructor(message = "invalid room") {
+    super(message);
+    this.name = "RoomValidationError";
+  }
+}
+
+export class RoomSlugConflictError extends Error {
+  constructor(message = "room slug is already taken") {
+    super(message);
+    this.name = "RoomSlugConflictError";
   }
 }
 
@@ -117,6 +133,27 @@ export function createRoomService(options: { store: RoomStore }): RoomService {
       if (!row) return null;
 
       return accessibleRoomMetadata(options.store, row, userId);
+    },
+    async createCommunityRoom(input) {
+      const community = await options.store.communityById(input.communityId);
+      if (!community) throw new RoomValidationError("community not found");
+
+      const role = await options.store.activeMembershipRole(input.actorUserId, community.id);
+      if (!role || !canManageCommunity(role)) throw new RoomAccessError("community admin role required");
+
+      const name = normalizeRoomName(input.name);
+      const slug = roomSlugForName(name);
+      const existingRoom = await options.store.roomByCommunityId(community.id, slug);
+      if (existingRoom) throw new RoomSlugConflictError();
+
+      await options.store.createRoom({
+        communityId: community.id,
+        slug,
+        name,
+        layout: defaultRoomLayout()
+      });
+
+      return accessibleCommunityRooms(options.store, community, input.actorUserId);
     }
   };
 }
@@ -143,12 +180,37 @@ export function disabledRoomService(): RoomService {
     },
     async roomByCommunityId() {
       throw new Error("rooms are not configured");
+    },
+    async createCommunityRoom() {
+      throw new Error("rooms are not configured");
     }
   };
 }
 
 export function isRoomAccessError(error: unknown): error is RoomAccessError {
   return error instanceof RoomAccessError;
+}
+
+export function isRoomValidationError(error: unknown): error is RoomValidationError {
+  return error instanceof RoomValidationError;
+}
+
+export function isRoomSlugConflictError(error: unknown): error is RoomSlugConflictError {
+  return error instanceof RoomSlugConflictError;
+}
+
+export function roomSlugForName(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .replace(/-{2,}/gu, "-");
+
+  if (slug.length < 2) throw new RoomValidationError("room name must include at least two URL-safe characters");
+  return slug;
 }
 
 function toRoomMetadata(row: RoomRow, roomSlugs: string[]): RoomMetadata {
@@ -159,6 +221,27 @@ function toRoomMetadata(row: RoomRow, roomSlugs: string[]): RoomMetadata {
     isDefault: row.isDefault,
     layoutVersion: row.layoutVersion,
     layout: parseRoomLayout(row.layoutJson, { roomSlugs })
+  };
+}
+
+function normalizeRoomName(name: string): string {
+  const normalized = name.trim().replace(/\s+/gu, " ");
+  if (normalized.length < 2) throw new RoomValidationError("room name must be at least 2 characters");
+  if (normalized.length > 80) throw new RoomValidationError("room name must be 80 characters or fewer");
+  return normalized;
+}
+
+function defaultRoomLayout(): RoomLayout {
+  return {
+    theme: "community-room",
+    backgroundAsset: "rooms/main-lobby.png",
+    avatarStyleSet: "soft-rounded",
+    objectPack: "empty-room-v1",
+    width: 2400,
+    height: 1600,
+    spawnPoints: [{ x: 320, y: 420 }],
+    collision: [],
+    teleports: []
   };
 }
 
