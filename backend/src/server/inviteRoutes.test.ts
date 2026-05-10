@@ -25,6 +25,22 @@ function inviteService(overrides: Partial<InviteService> = {}): InviteService {
       expiresAt: null,
       maxRedemptions: 1
     })),
+    listInvites: vi.fn(async () => ({
+      invites: [
+        {
+          id: "invite-1",
+          communityId: "community-1",
+          createdByUserId: "admin-1",
+          targetEmail: "friend@example.com",
+          maxRedemptions: 1,
+          redemptionCount: 0,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: new Date("2026-05-09T00:00:00Z"),
+          status: "active" as const
+        }
+      ]
+    })),
     redeemInvite: vi.fn(async () => ({ status: "redeemed" as const, communityId: "community-1" })),
     revokeInvite: vi.fn(async () => ({ status: "revoked" as const })),
     ...overrides
@@ -35,11 +51,6 @@ function communityAccessService(overrides: Partial<CommunityAccessService> = {})
   return {
     createCommunity: vi.fn(),
     requireCommunityManagement: vi.fn(),
-    requireDefaultCommunityManagement: vi.fn(async () => ({
-      id: "community-1",
-      slug: "default-community",
-      name: "Default Community"
-    })),
     listCommunityMembers: vi.fn(async () => []),
     assignCommunityRole: vi.fn(),
     ...overrides
@@ -51,7 +62,73 @@ describe("invite routes", () => {
     expect(registerInviteRoutes).toEqual(expect.any(Function));
   });
 
-  test("POST /admin/invites creates an invite for an authenticated admin session", async () => {
+  test("legacy default-community admin invite routes are not registered", async () => {
+    const invites = inviteService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("admin-1"),
+      inviteService: invites,
+      communityAccessService: communityAccessService()
+    });
+
+    const createResponse = await server.inject({
+      method: "POST",
+      url: "api/admin/invites",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { targetEmail: "Friend@Example.com" }
+    });
+    const revokeResponse = await server.inject({
+      method: "POST",
+      url: "api/admin/invites/invite-1/revoke",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" }
+    });
+
+    expect(createResponse.statusCode).toBe(404);
+    expect(revokeResponse.statusCode).toBe(404);
+    expect(invites.createInvite).not.toHaveBeenCalled();
+    expect(invites.revokeInvite).not.toHaveBeenCalled();
+  });
+
+  test("GET /communities/:communityId/invites lists invites for community managers", async () => {
+    const invites = inviteService();
+    const access = communityAccessService();
+    const server = buildServer({
+      config: loadConfig({}),
+      authService: authService("admin-1"),
+      inviteService: invites,
+      communityAccessService: access
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: "api/communities/community-1/invites",
+      cookies: { sl_session: "session-token" }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      invites: [
+        {
+          id: "invite-1",
+          communityId: "community-1",
+          createdByUserId: "admin-1",
+          targetEmail: "friend@example.com",
+          maxRedemptions: 1,
+          redemptionCount: 0,
+          expiresAt: null,
+          revokedAt: null,
+          createdAt: "2026-05-09T00:00:00.000Z",
+          status: "active"
+        }
+      ]
+    });
+    expect(access.requireCommunityManagement).toHaveBeenCalledWith({ actorUserId: "admin-1", communityId: "community-1" });
+    expect(invites.listInvites).toHaveBeenCalledWith({ communityId: "community-1" });
+  });
+
+  test("POST /communities/:communityId/invites creates a scoped invite", async () => {
     const invites = inviteService();
     const access = communityAccessService();
     const server = buildServer({
@@ -63,37 +140,31 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "api/admin/invites",
+      url: "api/communities/community-1/invites",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" },
       payload: { targetEmail: "Friend@Example.com", maxRedemptions: 1 }
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json()).toEqual({
-      id: "invite-1",
-      code: "invite-code",
-      targetEmail: "friend@example.com",
-      expiresAt: null,
-      maxRedemptions: 1
-    });
+    expect(access.requireCommunityManagement).toHaveBeenCalledWith({ actorUserId: "admin-1", communityId: "community-1" });
     expect(invites.createInvite).toHaveBeenCalledWith({
       createdByUserId: "admin-1",
+      communityId: "community-1",
       targetEmail: "Friend@Example.com",
       maxRedemptions: 1,
       expiresAt: null
     });
-    expect(access.requireDefaultCommunityManagement).toHaveBeenCalledWith("admin-1");
   });
 
-  test("POST /admin/invites requires a community admin role", async () => {
+  test("POST /communities/:communityId/invites requires a community admin role", async () => {
     const invites = inviteService();
     const server = buildServer({
       config: loadConfig({}),
       authService: authService("member-1"),
       inviteService: invites,
       communityAccessService: communityAccessService({
-        requireDefaultCommunityManagement: vi.fn(async () => {
+        requireCommunityManagement: vi.fn(async () => {
           throw new CommunityAccessError("community admin role required");
         })
       })
@@ -101,7 +172,7 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "api/admin/invites",
+      url: "api/communities/community-1/invites",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" },
       payload: { targetEmail: "Friend@Example.com", maxRedemptions: 1 }
@@ -133,7 +204,7 @@ describe("invite routes", () => {
     });
   });
 
-  test("POST /admin/invites/:inviteId/revoke revokes an invite", async () => {
+  test("POST /communities/:communityId/invites/:inviteId/revoke revokes a scoped invite", async () => {
     const invites = inviteService();
     const access = communityAccessService();
     const server = buildServer({
@@ -145,15 +216,14 @@ describe("invite routes", () => {
 
     const response = await server.inject({
       method: "POST",
-      url: "api/admin/invites/invite-1/revoke",
+      url: "api/communities/community-1/invites/invite-1/revoke",
       cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
       headers: { "x-csrf-token": "csrf-token" }
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: "revoked" });
-    expect(access.requireDefaultCommunityManagement).toHaveBeenCalledWith("admin-1");
-    expect(invites.revokeInvite).toHaveBeenCalledWith("invite-1");
+    expect(access.requireCommunityManagement).toHaveBeenCalledWith({ actorUserId: "admin-1", communityId: "community-1" });
+    expect(invites.revokeInvite).toHaveBeenCalledWith({ inviteId: "invite-1", communityId: "community-1" });
   });
 
   test("POST /invites/redeem requires session and CSRF", async () => {

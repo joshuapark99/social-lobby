@@ -13,6 +13,9 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
+    listCommunityInvites: vi.fn(async () => ({ invites: [] })),
+    createCommunityInvite: vi.fn(),
+    revokeCommunityInvite: vi.fn(),
     listCommunities: vi.fn(async () => ({
       communities: [
         {

@@ -77,10 +77,13 @@ access tokens in frontend JavaScript for normal browser sessions.
 
 SL-006 keeps invite access behind the backend session and CSRF boundary.
 
-- `POST /admin/invites` creates an invite for the default community.
-- `POST /admin/invites/:inviteId/revoke` revokes an invite.
+- `GET /communities/:communityId/invites` lists auditable invite records for a
+  community owner or admin.
+- `POST /communities/:communityId/invites` creates an invite for that community.
+- `POST /communities/:communityId/invites/:inviteId/revoke` revokes an invite
+  for that community.
 - `POST /invites/redeem` redeems an invite for the authenticated browser
-  session and creates the default community membership.
+  session and creates membership in the invite's community.
 - Unsafe invite routes require the readable `sl_csrf` cookie value in the
   `X-CSRF-Token` header.
 - Email-targeted invites compare against the authenticated OIDC email after

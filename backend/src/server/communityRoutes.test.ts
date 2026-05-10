@@ -24,7 +24,6 @@ function communityAccessService(overrides: Partial<CommunityAccessService> = {})
   return {
     createCommunity: vi.fn(async ({ name }) => ({ id: "community-2", slug: "friday-game-night", name, viewerRole: "owner" as const })),
     requireCommunityManagement: vi.fn(),
-    requireDefaultCommunityManagement: vi.fn(),
     listCommunityMembers: vi.fn(async (): Promise<CommunityMember[]> => [
       {
         userId: "owner-1",

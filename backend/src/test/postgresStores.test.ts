@@ -57,6 +57,7 @@ describe.sequential("postgres-backed integration paths", () => {
 
       const invite = await service.createInvite({
         createdByUserId: admin.id,
+        communityId: "00000000-0000-4000-8000-000000000001",
         maxRedemptions: 1
       });
 

@@ -11,15 +11,6 @@ import {
 export class PostgresCommunityAccessStore implements CommunityAccessStore {
   constructor(private readonly pool: Pool) {}
 
-  async defaultCommunity(): Promise<{ id: string; slug: string; name: string }> {
-    const result = await this.pool.query<{ id: string; slug: string; name: string }>(
-      "SELECT id, slug, name FROM communities ORDER BY created_at ASC LIMIT 1"
-    );
-    const community = result.rows[0];
-    if (!community) throw new Error("default community is not configured");
-    return community;
-  }
-
   async createCommunity(input: { actorUserId: string; name: string; slug: string }): Promise<CommunitySummary> {
     const client = await this.pool.connect();
     try {
