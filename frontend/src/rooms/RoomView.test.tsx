@@ -10,6 +10,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     baseUrl: "/api",
     updateProfile: vi.fn(),
     createCommunity: vi.fn(),
+    createCommunityRoom: vi.fn(),
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),

@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { buildServer } from "./server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
-import { RoomAccessError, type RoomService } from "../rooms/service.js";
+import { RoomAccessError, RoomSlugConflictError, RoomValidationError, type RoomService } from "../rooms/service.js";
 import { registerRoomRoutes } from "../rooms/routes.js";
 import { ChatAccessError, type ChatService, type RoomChatMessage } from "../chat/service.js";
 
@@ -197,6 +197,47 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
           }
         : null
     ),
+    createCommunityRoom: vi.fn(async (_input: { actorUserId: string; communityId: string; name: string }) => ({
+      community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" as const },
+      rooms: [
+        {
+          slug: "main-lobby",
+          name: "Main Lobby",
+          kind: "permanent",
+          isDefault: true,
+          layoutVersion: 1,
+          layout: {
+            theme: "cozy-lobby",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "lobby-furniture-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        },
+        {
+          slug: "board-game-room",
+          name: "Board Game Room",
+          kind: "permanent",
+          isDefault: false,
+          layoutVersion: 1,
+          layout: {
+            theme: "community-room",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "empty-room-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        }
+      ]
+    })),
     ...overrides
   };
 }
@@ -333,6 +374,86 @@ describe("room routes", () => {
       })
     });
     expect(rooms.roomBySlug).toHaveBeenCalledWith("main-lobby", "user-1");
+  });
+
+  test("POST /communities/:communityId/rooms creates a room for authenticated managers", async () => {
+    const rooms = roomService();
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "POST",
+      url: "api/communities/community-1/rooms",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { name: "Board Game Room" }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" },
+      rooms: [expect.objectContaining({ slug: "main-lobby" }), expect.objectContaining({ slug: "board-game-room" })]
+    });
+    expect(rooms.createCommunityRoom).toHaveBeenCalledWith({
+      actorUserId: "user-1",
+      communityId: "community-1",
+      name: "Board Game Room"
+    });
+  });
+
+  test("POST /communities/:communityId/rooms maps room creation failures", async () => {
+    const deniedRooms = roomService({
+      createCommunityRoom: vi.fn(async () => {
+        throw new RoomAccessError("community admin role required");
+      })
+    });
+    const deniedServer = buildServer({ config: loadConfig({}), authService: authService(), roomService: deniedRooms });
+
+    const denied = await deniedServer.inject({
+      method: "POST",
+      url: "api/communities/community-1/rooms",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { name: "Board Game Room" }
+    });
+
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toEqual({ error: "community admin role required" });
+
+    const invalidRooms = roomService({
+      createCommunityRoom: vi.fn(async () => {
+        throw new RoomValidationError("room name must be at least 2 characters");
+      })
+    });
+    const invalidServer = buildServer({ config: loadConfig({}), authService: authService(), roomService: invalidRooms });
+
+    const invalid = await invalidServer.inject({
+      method: "POST",
+      url: "api/communities/community-1/rooms",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { name: "A" }
+    });
+
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toEqual({ error: "room name must be at least 2 characters" });
+
+    const conflictRooms = roomService({
+      createCommunityRoom: vi.fn(async () => {
+        throw new RoomSlugConflictError();
+      })
+    });
+    const conflictServer = buildServer({ config: loadConfig({}), authService: authService(), roomService: conflictRooms });
+
+    const conflict = await conflictServer.inject({
+      method: "POST",
+      url: "api/communities/community-1/rooms",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { name: "Main Lobby" }
+    });
+
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toEqual({ error: "room slug is already taken" });
   });
 
   test("GET /rooms/:roomSlug returns 404 when a room is missing", async () => {

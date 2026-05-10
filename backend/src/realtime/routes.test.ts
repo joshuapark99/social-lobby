@@ -33,6 +33,7 @@ function roomService(): RoomService {
     listCommunityRoomsById: vi.fn(),
     roomByCommunitySlug: vi.fn(),
     roomByCommunityId: vi.fn(),
+    createCommunityRoom: vi.fn(),
     roomBySlug: vi.fn(async (roomSlug: string) =>
       roomSlug === "main-lobby"
         ? {

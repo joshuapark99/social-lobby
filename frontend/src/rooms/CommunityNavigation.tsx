@@ -29,6 +29,8 @@ export function CommunityNavigation({
   const [generatedInviteCode, setGeneratedInviteCode] = useState("");
   const [communityName, setCommunityName] = useState("");
   const [createStatus, setCreateStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [roomName, setRoomName] = useState("");
+  const [roomCreateStatus, setRoomCreateStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteStatus, setInviteStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -246,6 +248,34 @@ export function CommunityNavigation({
     }
   }
 
+  async function submitRoom(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedCommunity) return;
+    const name = roomName.trim();
+    if (!name) return;
+
+    setRoomCreateStatus("submitting");
+    setMessage("");
+
+    try {
+      const updatedCommunity = await apiClient.createCommunityRoom(selectedCommunity.community.id, name);
+      setCommunities((current) => ({
+        communities: current.communities.map((community) =>
+          community.community.id === updatedCommunity.community.id ? updatedCommunity : community
+        )
+      }));
+      setRoomName("");
+      setRoomCreateStatus("success");
+      setMessage("Room created.");
+      const createdRoom =
+        updatedCommunity.rooms.find((room) => room.name === name) ?? updatedCommunity.rooms[updatedCommunity.rooms.length - 1];
+      if (createdRoom) navigateToRoom(updatedCommunity, createdRoom.slug);
+    } catch (error) {
+      setRoomCreateStatus("error");
+      setMessage(error instanceof Error ? error.message : "Unable to create room.");
+    }
+  }
+
   return (
     <nav aria-label="Communities and rooms" className={`community-nav${collapsed ? " community-nav-collapsed" : ""}`}>
       <div className="community-nav__rail">
@@ -377,6 +407,23 @@ export function CommunityNavigation({
               </div>
             ))}
             <div className="community-nav__settings-divider" />
+            <h3>Rooms</h3>
+            <form className="community-nav__invite" onSubmit={submitRoom}>
+              <label htmlFor="room-name">Create room</label>
+              <div>
+                <input
+                  id="room-name"
+                  maxLength={80}
+                  onChange={(event) => setRoomName(event.target.value)}
+                  placeholder="Room name"
+                  value={roomName}
+                />
+                <button disabled={roomCreateStatus === "submitting" || roomName.trim() === ""} type="submit">
+                  Create room
+                </button>
+              </div>
+            </form>
+            <div className="community-nav__settings-divider" />
             <h3>Invites</h3>
             <form className="community-nav__invite" onSubmit={createManagedInvite}>
               <label htmlFor="managed-invite-email">Create invite</label>
@@ -480,7 +527,10 @@ export function CommunityNavigation({
             {message ? (
               <p
                 className={
-                  createStatus === "error" || inviteStatus === "error" || inviteManagementStatus === "error"
+                  createStatus === "error" ||
+                  inviteStatus === "error" ||
+                  inviteManagementStatus === "error" ||
+                  roomCreateStatus === "error"
                     ? "form-message form-message-error"
                     : "form-message"
                 }
@@ -492,7 +542,10 @@ export function CommunityNavigation({
         ) : message ? (
           <p
             className={
-              createStatus === "error" || inviteStatus === "error" || inviteManagementStatus === "error"
+              createStatus === "error" ||
+              inviteStatus === "error" ||
+              inviteManagementStatus === "error" ||
+              roomCreateStatus === "error"
                 ? "form-message form-message-error"
                 : "form-message"
             }

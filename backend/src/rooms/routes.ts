@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
+import { csrfMatches } from "../auth/cookies.js";
 import { requireIdentity } from "../auth/http.js";
 import type { AuthService } from "../auth/service.js";
 import { isChatAccessError, type ChatService } from "../chat/service.js";
-import { isRoomAccessError, type RoomService } from "./service.js";
+import { isRoomAccessError, isRoomSlugConflictError, isRoomValidationError, type RoomService } from "./service.js";
 
 export function registerRoomRoutes(
   server: FastifyInstance,
@@ -61,6 +62,26 @@ export function registerRoomRoutes(
       if (isRoomAccessError(error)) {
         return reply.status(403).send({ error: error.message });
       }
+      return reply.status(500).send({ error: errorMessage(error) });
+    }
+  });
+
+  server.post<{ Params: { communityId: string }; Body: { name?: string } }>("/api/communities/:communityId/rooms", async (request, reply) => {
+    if (!csrfMatches(request)) return reply.status(403).send({ error: "csrf token mismatch" });
+    const identity = await requireIdentity(request, reply, options.authService);
+    if (!identity) return reply;
+
+    try {
+      const rooms = await options.roomService.createCommunityRoom({
+        actorUserId: identity.userId,
+        communityId: request.params.communityId,
+        name: request.body?.name ?? ""
+      });
+      return reply.status(201).send(rooms);
+    } catch (error) {
+      if (isRoomAccessError(error)) return reply.status(403).send({ error: error.message });
+      if (isRoomSlugConflictError(error)) return reply.status(409).send({ error: error.message });
+      if (isRoomValidationError(error)) return reply.status(400).send({ error: error.message });
       return reply.status(500).send({ error: errorMessage(error) });
     }
   });

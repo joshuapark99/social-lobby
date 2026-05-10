@@ -294,6 +294,7 @@ async function installVoiceHarness(page: Page, broker: VoiceBroker, identity: Vo
         baseUrl: "/api",
         updateProfile: async () => ({ displayName: identity.userName, username: identity.userName }),
         createCommunity: async () => ({ community: { id: "community-2", slug: "new-community", name: "New Community" }, rooms: [] }),
+        createCommunityRoom: async () => ({ community: room.community, rooms: [room.room] }),
         redeemInvite: async () => ({ status: "redeemed", communityId: "community-1" }),
         listCommunityMembers: async () => ({ members: [] }),
         updateCommunityMemberRole: async () => ({ userId: identity.userId, communityId: "community-1", role: "member", status: "active" }),

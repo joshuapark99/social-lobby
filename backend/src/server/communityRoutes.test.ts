@@ -83,6 +83,7 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
     roomBySlug: vi.fn(),
     roomByCommunitySlug: vi.fn(),
     roomByCommunityId: vi.fn(),
+    createCommunityRoom: vi.fn(),
     ...overrides
   };
 }

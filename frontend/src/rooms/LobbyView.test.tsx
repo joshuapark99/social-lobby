@@ -8,6 +8,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     baseUrl: "/api",
     updateProfile: vi.fn(),
     createCommunity: vi.fn(),
+    createCommunityRoom: vi.fn(),
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
@@ -301,6 +302,77 @@ describe("LobbyView", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]);
 
     await waitFor(() => expect(revokeCommunityInvite).toHaveBeenCalledWith("community-1", "invite-1"));
+  });
+
+  it("lets community managers create rooms and opens the new room", async () => {
+    const createCommunityRoom = vi.fn(async () => ({
+      community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "admin" as const },
+      rooms: [
+        {
+          slug: "main-lobby",
+          name: "Main Lobby",
+          kind: "permanent",
+          isDefault: true,
+          layoutVersion: 1,
+          layout: {
+            theme: "cozy-lobby",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "lobby-furniture-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        },
+        {
+          slug: "board-game-room",
+          name: "Board Game Room",
+          kind: "permanent",
+          isDefault: false,
+          layoutVersion: 1,
+          layout: {
+            theme: "community-room",
+            backgroundAsset: "rooms/main-lobby.png",
+            avatarStyleSet: "soft-rounded",
+            objectPack: "empty-room-v1",
+            width: 2400,
+            height: 1600,
+            spawnPoints: [{ x: 320, y: 420 }],
+            collision: [],
+            teleports: []
+          }
+        }
+      ]
+    }));
+    const onNavigate = vi.fn();
+
+    render(
+      <LobbyView
+        apiClient={apiClient({
+          listCommunities: vi.fn(async () => ({
+            communities: [
+              {
+                community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "admin" as const },
+                rooms: []
+              }
+            ]
+          })),
+          createCommunityRoom
+        })}
+        onNavigate={onNavigate}
+        session={session}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Community settings" }));
+    fireEvent.change(screen.getByLabelText("Create room"), { target: { value: "Board Game Room" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create room" }));
+
+    await waitFor(() => expect(createCommunityRoom).toHaveBeenCalledWith("community-1", "Board Game Room"));
+    expect(await screen.findByText("Board Game Room")).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenCalledWith("/community/default-community/rooms/board-game-room");
   });
 
   it("lets regular members show all members without settings access", async () => {
