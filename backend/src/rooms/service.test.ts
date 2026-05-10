@@ -143,6 +143,18 @@ function roomStore(overrides: Partial<RoomStore> = {}): RoomStore {
       layoutVersion: 1,
       layoutJson: input.layout
     }),
+    updateRoomLayout: async (input) => ({
+      id: input.roomId,
+      communityId: "community-1",
+      communitySlug: "default-community",
+      communityName: "Default Community",
+      slug: "main-lobby",
+      name: "Main Lobby",
+      kind: "permanent",
+      isDefault: true,
+      layoutVersion: 2,
+      layoutJson: input.layout
+    }),
     ...overrides
   };
 }
@@ -365,5 +377,58 @@ describe("room service", () => {
     await expect(
       duplicateService.createCommunityRoom({ actorUserId: "owner-1", communityId: "community-1", name: "Main Lobby" })
     ).rejects.toThrow("room slug is already taken");
+  });
+
+  test("updates room tables for community managers", async () => {
+    const service = createRoomService({
+      store: roomStore({
+        activeMembershipRole: async () => "owner"
+      })
+    });
+
+    await expect(
+      service.updateCommunityRoomTables({
+        actorUserId: "owner-1",
+        communityId: "community-1",
+        roomSlug: "main-lobby",
+        tables: [{ id: "table-1", label: "Strategy Table", x: 640, y: 520, seats: 6 }]
+      })
+    ).resolves.toEqual({
+      community: {
+        id: "community-1",
+        slug: "default-community",
+        name: "Default Community",
+        viewerRole: "owner"
+      },
+      room: expect.objectContaining({
+        slug: "main-lobby",
+        layoutVersion: 2,
+        layout: expect.objectContaining({
+          tables: [{ id: "table-1", label: "Strategy Table", x: 640, y: 520, w: 320, h: 180, seats: 6 }]
+        })
+      })
+    });
+  });
+
+  test("rejects table updates for regular members and invalid table data", async () => {
+    const memberService = createRoomService({ store: roomStore({ activeMembershipRole: async () => "member" }) });
+    await expect(
+      memberService.updateCommunityRoomTables({
+        actorUserId: "member-1",
+        communityId: "community-1",
+        roomSlug: "main-lobby",
+        tables: []
+      })
+    ).rejects.toThrow("community admin role required");
+
+    const managerService = createRoomService({ store: roomStore({ activeMembershipRole: async () => "admin" }) });
+    await expect(
+      managerService.updateCommunityRoomTables({
+        actorUserId: "admin-1",
+        communityId: "community-1",
+        roomSlug: "main-lobby",
+        tables: [{ id: "table-1", label: "Too Far", x: 2300, y: 520, seats: 4 }]
+      })
+    ).rejects.toThrow("table 0 must be within room bounds");
   });
 });

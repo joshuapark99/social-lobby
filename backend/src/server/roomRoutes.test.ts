@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { buildServer } from "./server.js";
 import { loadConfig } from "../config/config.js";
 import type { AuthService } from "../auth/service.js";
-import { RoomAccessError, RoomSlugConflictError, RoomValidationError, type RoomService } from "../rooms/service.js";
+import { RoomAccessError, RoomSlugConflictError, RoomValidationError, type RoomService, type RoomTableInput } from "../rooms/service.js";
 import { registerRoomRoutes } from "../rooms/routes.js";
 import { ChatAccessError, type ChatService, type RoomChatMessage } from "../chat/service.js";
 
@@ -215,7 +215,8 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
             height: 1600,
             spawnPoints: [{ x: 320, y: 420 }],
             collision: [],
-            teleports: []
+            teleports: [],
+            tables: []
           }
         },
         {
@@ -233,10 +234,41 @@ function roomService(overrides: Partial<RoomService> = {}): RoomService {
             height: 1600,
             spawnPoints: [{ x: 320, y: 420 }],
             collision: [],
-            teleports: []
+            teleports: [],
+            tables: []
           }
         }
       ]
+    })),
+    updateCommunityRoomTables: vi.fn(async ({ tables }) => ({
+      community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" as const },
+      room: {
+        slug: "main-lobby",
+        name: "Main Lobby",
+        kind: "permanent",
+        isDefault: true,
+        layoutVersion: 2,
+        layout: {
+          theme: "cozy-lobby",
+          backgroundAsset: "rooms/main-lobby.png",
+          avatarStyleSet: "soft-rounded",
+          objectPack: "lobby-furniture-v1",
+          width: 2400,
+          height: 1600,
+          spawnPoints: [{ x: 320, y: 420 }],
+          collision: [],
+          teleports: [],
+          tables: tables.map((table: RoomTableInput) => ({
+            id: table.id ?? "table-1",
+            label: table.label,
+            x: table.x,
+            y: table.y,
+            w: table.w ?? 320,
+            h: table.h ?? 180,
+            seats: table.seats
+          }))
+        }
+      }
     })),
     ...overrides
   };
@@ -398,6 +430,77 @@ describe("room routes", () => {
       communityId: "community-1",
       name: "Board Game Room"
     });
+  });
+
+  test("PUT /communities/:communityId/rooms/:roomSlug/tables publishes room tables for authenticated managers", async () => {
+    const rooms = roomService();
+    const server = buildServer({ config: loadConfig({}), authService: authService(), roomService: rooms });
+
+    const response = await server.inject({
+      method: "PUT",
+      url: "api/communities/community-1/rooms/main-lobby/tables",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: {
+        tables: [{ id: "table-1", label: "Strategy Table", x: 640, y: 520, seats: 6 }]
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" },
+      room: expect.objectContaining({
+        slug: "main-lobby",
+        layoutVersion: 2,
+        layout: expect.objectContaining({
+          tables: [{ id: "table-1", label: "Strategy Table", x: 640, y: 520, w: 320, h: 180, seats: 6 }]
+        })
+      })
+    });
+    expect(rooms.updateCommunityRoomTables).toHaveBeenCalledWith({
+      actorUserId: "user-1",
+      communityId: "community-1",
+      roomSlug: "main-lobby",
+      tables: [{ id: "table-1", label: "Strategy Table", x: 640, y: 520, seats: 6 }]
+    });
+  });
+
+  test("PUT /communities/:communityId/rooms/:roomSlug/tables maps table update failures", async () => {
+    const deniedRooms = roomService({
+      updateCommunityRoomTables: vi.fn(async () => {
+        throw new RoomAccessError("community admin role required");
+      })
+    });
+    const deniedServer = buildServer({ config: loadConfig({}), authService: authService(), roomService: deniedRooms });
+
+    const denied = await deniedServer.inject({
+      method: "PUT",
+      url: "api/communities/community-1/rooms/main-lobby/tables",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { tables: [] }
+    });
+
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json()).toEqual({ error: "community admin role required" });
+
+    const invalidRooms = roomService({
+      updateCommunityRoomTables: vi.fn(async () => {
+        throw new RoomValidationError("table 1 seats must be between 1 and 12");
+      })
+    });
+    const invalidServer = buildServer({ config: loadConfig({}), authService: authService(), roomService: invalidRooms });
+
+    const invalid = await invalidServer.inject({
+      method: "PUT",
+      url: "api/communities/community-1/rooms/main-lobby/tables",
+      cookies: { sl_session: "session-token", sl_csrf: "csrf-token" },
+      headers: { "x-csrf-token": "csrf-token" },
+      payload: { tables: [{ label: "Too Big", x: 640, y: 520, seats: 20 }] }
+    });
+
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toEqual({ error: "table 1 seats must be between 1 and 12" });
   });
 
   test("POST /communities/:communityId/rooms maps room creation failures", async () => {

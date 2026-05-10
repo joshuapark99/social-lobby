@@ -137,6 +137,7 @@ export function PixiRoomCanvas({
     input.stage.position.set(contentBounds.left, contentBounds.top);
     input.stage.addChild(drawBackground(input.layout, input.GraphicsCtor));
     input.stage.addChild(drawCollisionLayer(input.layout.collision, input.GraphicsCtor));
+    (input.layout.tables ?? []).forEach((table) => input.stage.addChild(drawTable(table, input.GraphicsCtor)));
     if (input.localOccupant) input.stage.addChild(drawAvatar(input.localOccupant.position, 0x1f6f68, input.GraphicsCtor));
     input.remoteOccupants.forEach((occupant) => input.stage.addChild(drawAvatar(occupant.position, 0x42657a, input.GraphicsCtor)));
     input.app.render();
@@ -155,6 +156,24 @@ export function PixiRoomCanvas({
       g.rect(x, y, w, h);
       g.fill({ color: 0x120f0c, alpha: 0.14 });
     });
+    return g;
+  }
+
+  function drawTable(table: NonNullable<RoomLayout["tables"]>[number], GraphicsCtor: typeof import("pixi.js").Graphics): Graphics {
+    const g = new GraphicsCtor();
+    g.roundRect(table.x, table.y, table.w, table.h, 24);
+    g.fill({ color: 0x7f5539, alpha: 0.9 });
+    g.stroke({ color: 0xf6efe4, width: 5, alpha: 0.88 });
+
+    const seatCount = table.seats;
+    for (let index = 0; index < seatCount; index += 1) {
+      const offset = (index + 1) / (seatCount + 1);
+      const seatX = table.x + offset * table.w;
+      const seatY = index % 2 === 0 ? table.y - 18 : table.y + table.h + 18;
+      g.circle(seatX, seatY, 14);
+      g.fill({ color: 0x2f4f4f, alpha: 0.9 });
+    }
+
     return g;
   }
 

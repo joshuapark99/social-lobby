@@ -11,6 +11,7 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     updateProfile: vi.fn(),
     createCommunity: vi.fn(),
     createCommunityRoom: vi.fn(),
+    updateCommunityRoomTables: vi.fn(),
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
@@ -361,16 +362,98 @@ describe("RoomView", () => {
     expect(screen.getByRole("listitem")).toHaveTextContent("Realtime hello");
   });
 
-  it("keeps room voice controls disabled until the user joins the room", async () => {
+  it("does not expose room-wide voice controls", async () => {
     render(<RoomView apiClient={apiClient()} realtimeClient={realtimeClient()} roomSlug="main-lobby" />);
 
-    expect(await screen.findByRole("button", { name: "Join voice" })).toBeDisabled();
+    expect(await screen.findByRole("region", { name: "Table voice" })).toBeInTheDocument();
+    expect(screen.getByText("Voice starts at a table")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Join voice" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Join room" }));
 
-    expect(await screen.findByRole("button", { name: "Join voice" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Join voice" })).not.toBeInTheDocument();
   });
 
-  it("renders active voice members below the room view", async () => {
+  it("lets room managers add tables to the room layout", async () => {
+    const updateCommunityRoomTables = vi.fn(async (_communityId, _roomSlug, tables) => ({
+      community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" as const },
+      room: {
+        slug: "main-lobby",
+        name: "Main Lobby",
+        kind: "permanent",
+        isDefault: true,
+        layoutVersion: 2,
+        layout: {
+          theme: "cozy-lobby",
+          backgroundAsset: "rooms/main-lobby.png",
+          avatarStyleSet: "soft-rounded",
+          objectPack: "lobby-furniture-v1",
+          width: 2400,
+          height: 1600,
+          spawnPoints: [{ x: 320, y: 420 }],
+          collision: [],
+          teleports: [],
+          tables
+        }
+      }
+    }));
+    render(
+      <RoomView
+        apiClient={apiClient({
+          getRoom: vi.fn(async () => ({
+            community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "owner" as const },
+            room: {
+              slug: "main-lobby",
+              name: "Main Lobby",
+              kind: "permanent",
+              isDefault: true,
+              layoutVersion: 1,
+              layout: {
+                theme: "cozy-lobby",
+                backgroundAsset: "rooms/main-lobby.png",
+                avatarStyleSet: "soft-rounded",
+                objectPack: "lobby-furniture-v1",
+                width: 2400,
+                height: 1600,
+                spawnPoints: [{ x: 320, y: 420 }],
+                collision: [],
+                teleports: [],
+                tables: []
+              }
+            }
+          })),
+          updateCommunityRoomTables
+        })}
+        realtimeClient={realtimeClient()}
+        roomSlug="main-lobby"
+      />
+    );
+
+    fireEvent.change(await screen.findByLabelText("Table label"), { target: { value: "Strategy Table" } });
+    fireEvent.change(screen.getByLabelText("Seats"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("X position"), { target: { value: "640" } });
+    fireEvent.change(screen.getByLabelText("Y position"), { target: { value: "520" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add table" }));
+
+    await waitFor(() =>
+      expect(updateCommunityRoomTables).toHaveBeenCalledWith(
+        "community-1",
+        "main-lobby",
+        expect.arrayContaining([
+          expect.objectContaining({
+            label: "Strategy Table",
+            seats: 6,
+            x: 640,
+            y: 520,
+            w: 320,
+            h: 180
+          })
+        ])
+      )
+    );
+    expect(await screen.findByText("Strategy Table · 6 seats")).toBeInTheDocument();
+  });
+
+  it("communicates that voice is table-scoped instead of room-wide", async () => {
     render(
       <RoomView
         apiClient={apiClient()}
@@ -402,8 +485,9 @@ describe("RoomView", () => {
       />
     );
 
-    expect(await screen.findByRole("region", { name: "Room voice" })).toBeInTheDocument();
-    expect(screen.getByText("person@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Other Person")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Table voice" })).toBeInTheDocument();
+    expect(screen.getByText("This room has no tables yet. Room-wide voice is off.")).toBeInTheDocument();
+    expect(screen.queryByText("person@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("Other Person")).not.toBeInTheDocument();
   });
 });

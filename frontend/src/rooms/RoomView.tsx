@@ -5,10 +5,9 @@ import { ApiError, type ApiClient } from "../shared/apiClient";
 import type { NormalizedRoomPoint } from "./pixiRoomCanvasMath";
 import { deriveRemoteOccupants } from "./pixiRoomCanvasState";
 import { PixiRoomCanvas } from "./PixiRoomCanvas";
-import type { RoomChatMessage, RoomDetailResponse } from "./api";
+import type { RoomChatMessage, RoomDetailResponse, RoomTable } from "./api";
 import { CommunityNavigation } from "./CommunityNavigation";
 import { RoomChatPanel } from "./RoomChatPanel";
-import { RoomVoicePanel } from "./RoomVoicePanel";
 
 const keyboardStep = 80;
 
@@ -33,6 +32,8 @@ export function RoomView({
   const [messages, setMessages] = useState<RoomChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
+  const [tableDraft, setTableDraft] = useState({ label: "", seats: "4", x: "720", y: "560" });
+  const [tableStatus, setTableStatus] = useState<"idle" | "saving" | "error">("idle");
   const [displayedLocalOccupant, setDisplayedLocalOccupant] = useState<RealtimeOccupant | null>(null);
   const [displayedRemoteOccupants, setDisplayedRemoteOccupants] = useState<RealtimeOccupant[]>([]);
   const [realtime, setRealtime] = useState<RealtimeState>(() => ({
@@ -179,6 +180,48 @@ export function RoomView({
     setChatDraft("");
   }
 
+  async function publishTables(nextTables: RoomTable[]) {
+    if (!room) return;
+
+    setTableStatus("saving");
+    setError(null);
+
+    try {
+      const response = await apiClient.updateCommunityRoomTables(room.community.id, room.room.slug, nextTables);
+      setRoom(response);
+      setTableStatus("idle");
+    } catch (nextError) {
+      setTableStatus("error");
+      setError(nextError instanceof Error ? nextError.message : "Unable to update tables.");
+    }
+  }
+
+  function handleTableSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!room) return;
+
+    const label = tableDraft.label.trim();
+    const seats = Number(tableDraft.seats);
+    const x = Number(tableDraft.x);
+    const y = Number(tableDraft.y);
+    if (!label || !Number.isInteger(seats) || !Number.isInteger(x) || !Number.isInteger(y)) return;
+
+    const nextTable: RoomTable = {
+      id: nextTableId(),
+      label,
+      x,
+      y,
+      w: 320,
+      h: 180,
+      seats
+    };
+    void publishTables([...(room.room.layout.tables ?? []), nextTable]);
+    setTableDraft({ label: "", seats: "4", x: String(Math.min(x + 80, room.room.layout.width - nextTable.w)), y: String(y) });
+  }
+
+  const canManageRoom = room?.community.viewerRole === "owner" || room?.community.viewerRole === "admin";
+  const placedTables = room?.room.layout.tables ?? [];
+
   return (
     <div className="social-room-app">
       <CommunityNavigation
@@ -206,6 +249,66 @@ export function RoomView({
                 onPointerIntent={handlePointerIntent}
               />
             </div>
+            {canManageRoom ? (
+              <section className="room-table-editor" aria-label="Room table editor">
+                <div>
+                  <h3>Tables</h3>
+                  <p>{placedTables.length} placed</p>
+                </div>
+                <form onSubmit={handleTableSubmit}>
+                  <input
+                    aria-label="Table label"
+                    maxLength={60}
+                    onChange={(event) => setTableDraft((current) => ({ ...current, label: event.target.value }))}
+                    placeholder="Table label"
+                    value={tableDraft.label}
+                  />
+                  <input
+                    aria-label="Seats"
+                    max={12}
+                    min={1}
+                    onChange={(event) => setTableDraft((current) => ({ ...current, seats: event.target.value }))}
+                    type="number"
+                    value={tableDraft.seats}
+                  />
+                  <input
+                    aria-label="X position"
+                    min={0}
+                    onChange={(event) => setTableDraft((current) => ({ ...current, x: event.target.value }))}
+                    type="number"
+                    value={tableDraft.x}
+                  />
+                  <input
+                    aria-label="Y position"
+                    min={0}
+                    onChange={(event) => setTableDraft((current) => ({ ...current, y: event.target.value }))}
+                    type="number"
+                    value={tableDraft.y}
+                  />
+                  <button disabled={tableStatus === "saving" || tableDraft.label.trim() === ""} type="submit">
+                    Add table
+                  </button>
+                </form>
+                {placedTables.length > 0 ? (
+                  <div className="room-table-editor__list">
+                    {placedTables.map((table) => (
+                      <div className="room-table-editor__row" key={table.id}>
+                        <span>
+                          {table.label} · {table.seats} seats
+                        </span>
+                        <button
+                          disabled={tableStatus === "saving"}
+                          onClick={() => void publishTables(placedTables.filter((candidate) => candidate.id !== table.id))}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
           </>
         ) : null}
         <p className="room-stage__hint">Realtime: {realtime.status}</p>
@@ -222,14 +325,26 @@ export function RoomView({
           title="Room chat"
         />
       </div>
-      <RoomVoicePanel
-        joinedRoom={joinedRoomSlug === activeRoomSlug}
-        realtimeClient={realtimeClient}
-        roomSlug={activeRoomSlug}
-        voice={realtime.voice}
-      />
+      <section aria-label="Table voice" className="room-voice">
+        <div className="room-voice__header">
+          <div>
+            <p className="section-kicker">Table voice</p>
+            <h2>Voice starts at a table</h2>
+          </div>
+        </div>
+        <p className="room-voice__status">
+          {placedTables.length > 0
+            ? "Choose a table once table seating is enabled. Room-wide voice is off."
+            : "This room has no tables yet. Room-wide voice is off."}
+        </p>
+      </section>
     </div>
   );
+}
+
+function nextTableId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `table-${Date.now().toString(36)}`;
 }
 
 function mergeMessages(current: RoomChatMessage[], incoming: RoomChatMessage[]): RoomChatMessage[] {

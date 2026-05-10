@@ -8,6 +8,17 @@ export interface RoomLayout {
   spawnPoints: Array<{ x: number; y: number }>;
   collision: Array<{ x: number; y: number; w: number; h: number }>;
   teleports: Array<{ label: string; targetRoom: string }>;
+  tables?: RoomTable[];
+}
+
+export interface RoomTable {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  seats: number;
 }
 
 export interface RoomMetadata {
