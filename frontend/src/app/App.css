@@ -512,11 +512,35 @@ h3 {
   padding-top: 18px;
 }
 
+.community-nav__settings-divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
 .community-nav__member {
   align-items: center;
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.community-nav__managed-invite {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.community-nav__managed-invite strong,
+.community-nav__managed-invite span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.community-nav__managed-invite span {
+  color: rgba(255, 247, 234, 0.56);
+  font-size: 0.78rem;
 }
 
 .community-nav__member strong,
@@ -531,6 +555,7 @@ h3 {
 }
 
 .community-nav__member button,
+.community-nav__managed-invite button,
 .community-nav__role {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -543,6 +568,10 @@ h3 {
 }
 
 .community-nav__member button {
+  cursor: pointer;
+}
+
+.community-nav__managed-invite button {
   cursor: pointer;
 }
 
@@ -635,6 +664,31 @@ h3 {
   font: inherit;
   font-weight: 800;
   padding: 10px 12px;
+}
+
+.community-nav__invite-code {
+  background: rgba(135, 217, 158, 0.12);
+  border: 1px solid rgba(135, 217, 158, 0.24);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.community-nav__invite-code strong {
+  color: #fff7ea;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.community-nav__invite-code span {
+  color: rgba(255, 247, 234, 0.62);
+  font-size: 0.76rem;
+}
+
+.community-nav__invite-list {
+  display: grid;
+  gap: 10px;
 }
 
 .room-stage,

@@ -26,7 +26,6 @@ export type CommunityMember = {
 };
 
 export type CommunityAccessStore = {
-  defaultCommunity(): Promise<{ id: string; slug: string; name: string }>;
   createCommunity(input: { actorUserId: string; name: string; slug: string }): Promise<CommunitySummary>;
   membershipForUser(userId: string, communityId: string): Promise<CommunityMembership | null>;
   listMembers(communityId: string): Promise<CommunityMember[]>;
@@ -40,7 +39,6 @@ export type CommunityAccessStore = {
 export type CommunityAccessService = {
   createCommunity(input: { actorUserId: string; name: string }): Promise<CommunitySummary>;
   requireCommunityManagement(input: { actorUserId: string; communityId: string }): Promise<void>;
-  requireDefaultCommunityManagement(actorUserId: string): Promise<{ id: string; slug: string; name: string }>;
   listCommunityMembers(input: { actorUserId: string; communityId: string }): Promise<CommunityMember[]>;
   assignCommunityRole(input: {
     actorUserId: string;
@@ -96,11 +94,6 @@ export function createCommunityAccessService(options: { store: CommunityAccessSt
       return options.store.createCommunity({ actorUserId: input.actorUserId, name, slug });
     },
     requireCommunityManagement,
-    async requireDefaultCommunityManagement(actorUserId) {
-      const community = await options.store.defaultCommunity();
-      await requireCommunityManagement({ actorUserId, communityId: community.id });
-      return community;
-    },
     async listCommunityMembers(input) {
       await requireActiveMembership(input);
       return options.store.listMembers(input.communityId);
@@ -128,9 +121,6 @@ export function disabledCommunityAccessService(): CommunityAccessService {
       throw new CommunityAccessError("communities are not configured");
     },
     async requireCommunityManagement() {
-      throw new CommunityAccessError("communities are not configured");
-    },
-    async requireDefaultCommunityManagement() {
       throw new CommunityAccessError("communities are not configured");
     },
     async listCommunityMembers() {

@@ -8,7 +8,6 @@ import {
 
 function store(memberships: CommunityMembership[]): CommunityAccessStore {
   return {
-    defaultCommunity: async () => ({ id: "community-1", slug: "default-community", name: "Default Community" }),
     createCommunity: async (input) => ({
       id: "created-community",
       slug: input.slug,

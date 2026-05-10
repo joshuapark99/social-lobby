@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { ApiError, type ApiClient } from "../shared/apiClient";
-import type { CommunityMember, CommunityRoomsResponse, RoomListResponse } from "./api";
+import type { CommunityInvite, CommunityMember, CommunityRoomsResponse, RoomListResponse } from "./api";
 
 export function CommunityNavigation({
   apiClient,
@@ -21,6 +21,12 @@ export function CommunityNavigation({
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [membersStatus, setMembersStatus] = useState<"idle" | "loading" | "saving" | "error">("idle");
+  const [managedInvites, setManagedInvites] = useState<CommunityInvite[]>([]);
+  const [inviteManagementStatus, setInviteManagementStatus] = useState<"idle" | "loading" | "saving" | "error">("idle");
+  const [inviteTargetEmail, setInviteTargetEmail] = useState("");
+  const [inviteMaxRedemptions, setInviteMaxRedemptions] = useState("1");
+  const [inviteExpiresOn, setInviteExpiresOn] = useState(() => dateInputValue(addDays(new Date(), 14)));
+  const [generatedInviteCode, setGeneratedInviteCode] = useState("");
   const [communityName, setCommunityName] = useState("");
   const [createStatus, setCreateStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [inviteCode, setInviteCode] = useState("");
@@ -92,6 +98,31 @@ export function CommunityNavigation({
     };
   }, [apiClient, membersOpen, selectedCommunity, settingsOpen]);
 
+  useEffect(() => {
+    if (!settingsOpen || !selectedCommunity || !canManageSelectedCommunity) return;
+
+    let active = true;
+    setInviteManagementStatus("loading");
+    apiClient
+      .listCommunityInvites(selectedCommunity.community.id)
+      .then((response) => {
+        if (!active) return;
+        setManagedInvites(response.invites);
+        setInviteManagementStatus("idle");
+        setMessage("");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setManagedInvites([]);
+        setInviteManagementStatus("error");
+        setMessage(error instanceof Error ? error.message : "Unable to load invites.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [apiClient, canManageSelectedCommunity, selectedCommunity, settingsOpen]);
+
   function navigateToRoom(community: RoomListResponse, roomSlug: string) {
     const pathname = `/community/${encodeURIComponent(community.community.slug)}/rooms/${encodeURIComponent(roomSlug)}`;
     window.history.pushState({}, "", pathname);
@@ -136,6 +167,52 @@ export function CommunityNavigation({
     } catch (error) {
       setInviteStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to redeem invite.");
+    }
+  }
+
+  async function createManagedInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedCommunity) return;
+
+    setInviteManagementStatus("saving");
+    setGeneratedInviteCode("");
+    setMessage("");
+
+    try {
+      const createdInvite = await apiClient.createCommunityInvite(selectedCommunity.community.id, {
+        targetEmail: inviteTargetEmail.trim() || null,
+        maxRedemptions: inviteMaxRedemptions.trim() === "" ? null : Number(inviteMaxRedemptions),
+        expiresAt: inviteExpiresOn ? `${inviteExpiresOn}T23:59:59.999Z` : null
+      });
+      const refreshedInvites = await apiClient.listCommunityInvites(selectedCommunity.community.id);
+      setManagedInvites(refreshedInvites.invites);
+      setInviteTargetEmail("");
+      setInviteMaxRedemptions("1");
+      setInviteExpiresOn(dateInputValue(addDays(new Date(), 14)));
+      setGeneratedInviteCode(createdInvite.code);
+      setInviteManagementStatus("idle");
+      setMessage("Invite created.");
+    } catch (error) {
+      setInviteManagementStatus("error");
+      setMessage(error instanceof Error ? error.message : "Unable to create invite.");
+    }
+  }
+
+  async function revokeManagedInvite(inviteId: string) {
+    if (!selectedCommunity) return;
+
+    setInviteManagementStatus("saving");
+    setMessage("");
+
+    try {
+      await apiClient.revokeCommunityInvite(selectedCommunity.community.id, inviteId);
+      const refreshedInvites = await apiClient.listCommunityInvites(selectedCommunity.community.id);
+      setManagedInvites(refreshedInvites.invites);
+      setInviteManagementStatus("idle");
+      setMessage("Invite revoked.");
+    } catch (error) {
+      setInviteManagementStatus("error");
+      setMessage(error instanceof Error ? error.message : "Unable to revoke invite.");
     }
   }
 
@@ -299,6 +376,73 @@ export function CommunityNavigation({
                 )}
               </div>
             ))}
+            <div className="community-nav__settings-divider" />
+            <h3>Invites</h3>
+            <form className="community-nav__invite" onSubmit={createManagedInvite}>
+              <label htmlFor="managed-invite-email">Create invite</label>
+              <div>
+                <input
+                  id="managed-invite-email"
+                  onChange={(event) => setInviteTargetEmail(event.target.value)}
+                  placeholder="Email optional"
+                  type="email"
+                  value={inviteTargetEmail}
+                />
+                <input
+                  aria-label="Max uses"
+                  min={1}
+                  onChange={(event) => setInviteMaxRedemptions(event.target.value)}
+                  placeholder="Max uses"
+                  type="number"
+                  value={inviteMaxRedemptions}
+                />
+                <input
+                  aria-label="Expiry date"
+                  onChange={(event) => setInviteExpiresOn(event.target.value)}
+                  type="date"
+                  value={inviteExpiresOn}
+                />
+                <button disabled={inviteManagementStatus === "saving"} type="submit">
+                  Create invite
+                </button>
+              </div>
+            </form>
+            {generatedInviteCode ? (
+              <div className="community-nav__invite-code" aria-label="New invite code">
+                <strong>{generatedInviteCode}</strong>
+                <span>Share this code now. It will not be shown again.</span>
+              </div>
+            ) : null}
+            {inviteManagementStatus === "loading" ? <p className="muted">Loading invites...</p> : null}
+            <div className="community-nav__invite-list">
+              {managedInvites.map((invite) => (
+                <div className="community-nav__managed-invite" key={invite.id}>
+                  <div>
+                    <strong>{invite.targetEmail ?? "General invite"}</strong>
+                    <span>ID {shortInviteId(invite.id)}</span>
+                    <span>
+                      {inviteStatusLabel(invite.status)} · {invite.redemptionCount}
+                      {invite.maxRedemptions === null ? "" : `/${invite.maxRedemptions}`} used
+                    </span>
+                    <span>
+                      Created {formatInviteDate(invite.createdAt)} · Expires {invite.expiresAt ? formatInviteDate(invite.expiresAt) : "Never"}
+                    </span>
+                  </div>
+                  {invite.status === "active" ? (
+                    <button
+                      disabled={inviteManagementStatus === "saving"}
+                      onClick={() => revokeManagedInvite(invite.id)}
+                      type="button"
+                    >
+                      Revoke
+                    </button>
+                  ) : (
+                    <span className="community-nav__role">{inviteStatusLabel(invite.status)}</span>
+                  )}
+                </div>
+              ))}
+              {inviteManagementStatus !== "loading" && managedInvites.length === 0 ? <p className="muted">No invites yet.</p> : null}
+            </div>
           </section>
         ) : null}
         {addCommunityOpen ? (
@@ -334,13 +478,25 @@ export function CommunityNavigation({
               </div>
             </form>
             {message ? (
-              <p className={createStatus === "error" || inviteStatus === "error" ? "form-message form-message-error" : "form-message"}>
+              <p
+                className={
+                  createStatus === "error" || inviteStatus === "error" || inviteManagementStatus === "error"
+                    ? "form-message form-message-error"
+                    : "form-message"
+                }
+              >
                 {message}
               </p>
             ) : null}
           </section>
         ) : message ? (
-          <p className={createStatus === "error" || inviteStatus === "error" ? "form-message form-message-error" : "form-message"}>
+          <p
+            className={
+              createStatus === "error" || inviteStatus === "error" || inviteManagementStatus === "error"
+                ? "form-message form-message-error"
+                : "form-message"
+            }
+          >
             {message}
           </p>
         ) : null}
@@ -366,4 +522,35 @@ function roleLabel(role: CommunityMember["role"]): string {
     case "member":
       return "Member";
   }
+}
+
+function inviteStatusLabel(status: CommunityInvite["status"]): string {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "expired":
+      return "Expired";
+    case "revoked":
+      return "Revoked";
+    case "used":
+      return "Used";
+  }
+}
+
+function addDays(date: Date, days: number): Date {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
+function dateInputValue(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function formatInviteDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+}
+
+function shortInviteId(id: string): string {
+  return id.length > 12 ? id.slice(0, 8) : id;
 }

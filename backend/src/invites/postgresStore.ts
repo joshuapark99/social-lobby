@@ -4,15 +4,6 @@ import type { InviteRecord, InviteStore } from "./service.js";
 export class PostgresInviteStore implements InviteStore {
   constructor(private readonly pool: Pool) {}
 
-  async defaultCommunity(): Promise<{ id: string; slug: string }> {
-    const result = await this.pool.query<{ id: string; slug: string }>(
-      "SELECT id, slug FROM communities ORDER BY created_at ASC LIMIT 1"
-    );
-    const community = result.rows[0];
-    if (!community) throw new Error("default community is not configured");
-    return community;
-  }
-
   async createInvite(input: {
     codeHash: string;
     communityId: string;
@@ -24,15 +15,26 @@ export class PostgresInviteStore implements InviteStore {
     const result = await this.pool.query<InviteRow>(
       `INSERT INTO invites (community_id, code_hash, created_by_user_id, target_email, max_redemptions, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, code_hash, community_id, target_email, max_redemptions, redemption_count, expires_at, revoked_at`,
+       RETURNING id, code_hash, community_id, created_by_user_id, target_email, max_redemptions, redemption_count, expires_at, revoked_at, created_at`,
       [input.communityId, input.codeHash, input.createdByUserId, input.targetEmail, input.maxRedemptions, input.expiresAt]
     );
     return toInviteRecord(result.rows[0]);
   }
 
+  async listInvites(communityId: string): Promise<InviteRecord[]> {
+    const result = await this.pool.query<InviteRow>(
+      `SELECT id, code_hash, community_id, created_by_user_id, target_email, max_redemptions, redemption_count, expires_at, revoked_at, created_at
+       FROM invites
+       WHERE community_id = $1
+       ORDER BY created_at DESC`,
+      [communityId]
+    );
+    return result.rows.map(toInviteRecord);
+  }
+
   async findInviteByCodeHash(codeHash: string): Promise<InviteRecord | null> {
     const result = await this.pool.query<InviteRow>(
-      `SELECT id, code_hash, community_id, target_email, max_redemptions, redemption_count, expires_at, revoked_at
+      `SELECT id, code_hash, community_id, created_by_user_id, target_email, max_redemptions, redemption_count, expires_at, revoked_at, created_at
        FROM invites
        WHERE code_hash = $1`,
       [codeHash]
@@ -61,8 +63,15 @@ export class PostgresInviteStore implements InviteStore {
     await this.pool.query("UPDATE invites SET redemption_count = redemption_count + 1 WHERE id = $1", [inviteId]);
   }
 
-  async revokeInvite(inviteId: string): Promise<void> {
-    await this.pool.query("UPDATE invites SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL", [inviteId]);
+  async revokeInvite(input: { inviteId: string; communityId?: string }): Promise<void> {
+    await this.pool.query(
+      `UPDATE invites
+       SET revoked_at = now()
+       WHERE id = $1
+         AND ($2::uuid IS NULL OR community_id = $2::uuid)
+         AND revoked_at IS NULL`,
+      [input.inviteId, input.communityId ?? null]
+    );
   }
 }
 
@@ -70,11 +79,13 @@ type InviteRow = {
   id: string;
   code_hash: string;
   community_id: string;
+  created_by_user_id: string | null;
   target_email: string | null;
   max_redemptions: number | null;
   redemption_count: number;
   expires_at: Date | null;
   revoked_at: Date | null;
+  created_at: Date;
 };
 
 function toInviteRecord(row: InviteRow): InviteRecord {
@@ -82,10 +93,12 @@ function toInviteRecord(row: InviteRow): InviteRecord {
     id: row.id,
     codeHash: row.code_hash,
     communityId: row.community_id,
+    createdByUserId: row.created_by_user_id,
     targetEmail: row.target_email,
     maxRedemptions: row.max_redemptions,
     redemptionCount: row.redemption_count,
     expiresAt: row.expires_at,
-    revokedAt: row.revoked_at
+    revokedAt: row.revoked_at,
+    createdAt: row.created_at
   };
 }

@@ -11,6 +11,15 @@ function apiClient(overrides: Partial<ApiClient> = {}): ApiClient {
     redeemInvite: vi.fn(),
     listCommunityMembers: vi.fn(async () => ({ members: [] })),
     updateCommunityMemberRole: vi.fn(),
+    listCommunityInvites: vi.fn(async () => ({ invites: [] })),
+    createCommunityInvite: vi.fn(async () => ({
+      id: "invite-1",
+      code: "invite-code",
+      targetEmail: null,
+      maxRedemptions: 1,
+      expiresAt: null
+    })),
+    revokeCommunityInvite: vi.fn(async () => ({ status: "revoked" as const })),
     listCommunities: vi.fn(async () => ({
       communities: [
         {
@@ -176,6 +185,122 @@ describe("LobbyView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Make admin" }));
 
     await waitFor(() => expect(updateCommunityMemberRole).toHaveBeenCalledWith("community-1", "member-1", "admin"));
+  });
+
+  it("lets community managers create and revoke invites", async () => {
+    const createCommunityInvite = vi.fn(async () => ({
+      id: "invite-2",
+      code: "new-code",
+      targetEmail: "friend@example.com",
+      maxRedemptions: 1,
+      expiresAt: null
+    }));
+    const revokeCommunityInvite = vi.fn(async () => ({ status: "revoked" as const }));
+    const listCommunityInvites = vi
+      .fn()
+      .mockResolvedValueOnce({
+        invites: [
+          {
+            id: "invite-1",
+            communityId: "community-1",
+            createdByUserId: "admin-1",
+            targetEmail: null,
+            maxRedemptions: 1,
+            redemptionCount: 0,
+            expiresAt: null,
+            revokedAt: null,
+            createdAt: "2026-05-09T00:00:00.000Z",
+            status: "active" as const
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        invites: [
+          {
+            id: "invite-1",
+            communityId: "community-1",
+            createdByUserId: "admin-1",
+            targetEmail: null,
+            maxRedemptions: 5,
+            redemptionCount: 0,
+            expiresAt: "2026-05-23T23:59:59.999Z",
+            revokedAt: null,
+            createdAt: "2026-05-09T00:00:00.000Z",
+            status: "active" as const
+          },
+          {
+            id: "invite-2",
+            communityId: "community-1",
+            createdByUserId: "admin-1",
+            targetEmail: "friend@example.com",
+            maxRedemptions: 5,
+            redemptionCount: 0,
+            expiresAt: "2026-05-23T23:59:59.999Z",
+            revokedAt: null,
+            createdAt: "2026-05-09T00:01:00.000Z",
+            status: "active" as const
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        invites: [
+          {
+            id: "invite-1",
+            communityId: "community-1",
+            createdByUserId: "admin-1",
+            targetEmail: null,
+            maxRedemptions: 1,
+            redemptionCount: 0,
+            expiresAt: null,
+            revokedAt: "2026-05-09T00:02:00.000Z",
+            createdAt: "2026-05-09T00:00:00.000Z",
+            status: "revoked" as const
+          }
+        ]
+      });
+
+    render(
+      <LobbyView
+        apiClient={apiClient({
+          listCommunities: vi.fn(async () => ({
+            communities: [
+              {
+                community: { id: "community-1", slug: "default-community", name: "Default Community", viewerRole: "admin" as const },
+                rooms: []
+              }
+            ]
+          })),
+          listCommunityMembers: vi.fn(async () => ({ members: [] })),
+          listCommunityInvites,
+          createCommunityInvite,
+          revokeCommunityInvite
+        })}
+        session={session}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Community settings" }));
+    expect(await screen.findByText("General invite")).toBeInTheDocument();
+    expect(await screen.findByText("ID invite-1")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Create invite"), { target: { value: "friend@example.com" } });
+    fireEvent.change(screen.getByLabelText("Max uses"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Expiry date"), { target: { value: "2026-05-23" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create invite" }));
+
+    await waitFor(() =>
+      expect(createCommunityInvite).toHaveBeenCalledWith("community-1", {
+        targetEmail: "friend@example.com",
+        maxRedemptions: 5,
+        expiresAt: "2026-05-23T23:59:59.999Z"
+      })
+    );
+    expect(await screen.findByText("new-code")).toBeInTheDocument();
+    expect(await screen.findByText("friend@example.com")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Revoke" })[0]);
+
+    await waitFor(() => expect(revokeCommunityInvite).toHaveBeenCalledWith("community-1", "invite-1"));
   });
 
   it("lets regular members show all members without settings access", async () => {

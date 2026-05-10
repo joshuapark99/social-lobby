@@ -56,6 +56,31 @@ export interface CommunityMembersResponse {
   members: CommunityMember[];
 }
 
+export interface CommunityInvite {
+  id: string;
+  communityId: string;
+  createdByUserId: string | null;
+  targetEmail: string | null;
+  maxRedemptions: number | null;
+  redemptionCount: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  status: "active" | "expired" | "revoked" | "used";
+}
+
+export interface CommunityInvitesResponse {
+  invites: CommunityInvite[];
+}
+
+export interface CreatedCommunityInvite {
+  id: string;
+  code: string;
+  targetEmail: string | null;
+  maxRedemptions: number | null;
+  expiresAt: string | null;
+}
+
 export interface RoomChatMessage {
   id: string;
   roomSlug: string;

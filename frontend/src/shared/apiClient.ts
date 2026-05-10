@@ -1,5 +1,7 @@
 import type {
   CommunityMembersResponse,
+  CommunityInvitesResponse,
+  CreatedCommunityInvite,
   CommunityRoomsResponse,
   RoomChatHistoryResponse,
   RoomDetailResponse,
@@ -24,6 +26,9 @@ export interface ApiClient {
   listCommunities(): Promise<CommunityRoomsResponse>;
   listCommunityMembers(communityId: string): Promise<CommunityMembersResponse>;
   updateCommunityMemberRole(communityId: string, userId: string, role: "admin" | "member"): Promise<{ userId: string; communityId: string; role: "admin" | "member" }>;
+  listCommunityInvites(communityId: string): Promise<CommunityInvitesResponse>;
+  createCommunityInvite(communityId: string, input: { targetEmail?: string | null; maxRedemptions?: number | null; expiresAt?: string | null }): Promise<CreatedCommunityInvite>;
+  revokeCommunityInvite(communityId: string, inviteId: string): Promise<{ status: "revoked" }>;
   listRooms(): Promise<RoomListResponse>;
   listCommunityRooms(communitySlug: string): Promise<RoomListResponse>;
   getRoom(roomSlug: string, communitySlug?: string): Promise<RoomDetailResponse>;
@@ -130,6 +135,53 @@ export function createApiClient(baseUrl = "/api"): ApiClient {
       }
 
       return (await response.json()) as { userId: string; communityId: string; role: "admin" | "member" };
+    },
+    async listCommunityInvites(communityId: string) {
+      const response = await fetch(`${baseUrl}/communities/${encodeURIComponent(communityId)}/invites`, {
+        credentials: "include"
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to load invites." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to load invites.", response.status);
+      }
+
+      return (await response.json()) as CommunityInvitesResponse;
+    },
+    async createCommunityInvite(communityId, input) {
+      const response = await fetch(`${baseUrl}/communities/${encodeURIComponent(communityId)}/invites`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          ...csrfHeader()
+        },
+        body: JSON.stringify(input)
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to create invite." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to create invite.", response.status);
+      }
+
+      return (await response.json()) as CreatedCommunityInvite;
+    },
+    async revokeCommunityInvite(communityId, inviteId) {
+      const response = await fetch(
+        `${baseUrl}/communities/${encodeURIComponent(communityId)}/invites/${encodeURIComponent(inviteId)}/revoke`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: csrfHeader()
+        }
+      );
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({ error: "Unable to revoke invite." }))) as { error?: string };
+        throw new ApiError(body.error ?? "Unable to revoke invite.", response.status);
+      }
+
+      return (await response.json()) as { status: "revoked" };
     },
     async listRooms() {
       const response = await fetch(`${baseUrl}/communities/default/rooms`, {
